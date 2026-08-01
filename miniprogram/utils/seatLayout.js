@@ -22,7 +22,7 @@ function buildSeatLayout(rows, seatsPerColumn) {
         labelIndex += 1;
       }
     }
-    gridCol += seatCount;
+    gridCol += seatCount + 1;
   });
 
   return seats.map((seat) => ({
@@ -36,20 +36,40 @@ function makeSeats() {
 }
 
 function normalizeSeatLayout(seats) {
-  return seats.map((seat, index) => ({
+  const groupOffsets = {};
+  const sortedGroups = [...new Set(seats.map((seat, index) => (
+    typeof seat.groupIndex === 'number' ? seat.groupIndex : Math.floor((index % 6) / 2)
+  )))].sort((first, second) => first - second);
+  let nextGridCol = 1;
+
+  sortedGroups.forEach((groupIndex) => {
+    const groupSeats = seats.filter((seat, index) => (
+      (typeof seat.groupIndex === 'number' ? seat.groupIndex : Math.floor((index % 6) / 2)) === groupIndex
+    ));
+    const seatCount = Math.max(...groupSeats.map((seat) => seat.seatCount || 2));
+    groupOffsets[groupIndex] = nextGridCol;
+    nextGridCol += seatCount + 1;
+  });
+
+  return seats.map((seat, index) => {
+    const groupIndex = typeof seat.groupIndex === 'number' ? seat.groupIndex : Math.floor((index % 6) / 2);
+    const seatIndex = seat.seatIndex || (index % 2) + 1;
+    const seatCount = seat.seatCount || 2;
+    return {
     id: seat.id || `seat-${index + 1}`,
     label: seat.label || `${index + 1}`,
     row: seat.row || Math.floor(index / 6) + 1,
-    groupIndex: typeof seat.groupIndex === 'number' ? seat.groupIndex : Math.floor((index % 6) / 2),
-    seatIndex: seat.seatIndex || (index % 2) + 1,
-    seatCount: seat.seatCount || 2,
-    gridCol: seat.gridCol || index + 1,
-    aisleAfter: !!seat.aisleAfter,
+    groupIndex,
+    seatIndex,
+    seatCount,
+    gridCol: groupOffsets[groupIndex] + seatIndex - 1,
+    aisleAfter: seatIndex === seatCount && groupIndex < sortedGroups[sortedGroups.length - 1],
     studentName: seat.studentName || '',
     note: seat.note || '',
     deleted: !!seat.deleted,
     selected: false
-  }));
+    };
+  });
 }
 
 module.exports = {

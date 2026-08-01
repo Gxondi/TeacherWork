@@ -1,18 +1,65 @@
 const {
   DAYS,
   DEFAULT_PERIOD_TIMES,
+  WORKDAYS,
   makeTimetable,
   normalizeCell,
   normalizePeriodTimes
 } = require('../utils/timetable');
 const { makeSeats, normalizeSeatLayout } = require('../utils/seatLayout');
 
+function makeDuties() {
+  return ['教室清扫', '走廊', '黑板', '倒垃圾'].map((task, index) => ({
+    id: `duty-${index + 1}`,
+    task,
+    students: WORKDAYS.reduce((result, day) => ({
+      ...result,
+      [day]: ''
+    }), {})
+  }));
+}
+
+function normalizeDutyStudents(students = {}) {
+  return WORKDAYS.reduce((result, day) => ({
+    ...result,
+    [day]: students[day] || ''
+  }), {});
+}
+
+function normalizeDuties(duties) {
+  if (!Array.isArray(duties) || !duties.length) {
+    return makeDuties();
+  }
+
+  if (duties[0].day) {
+    const task = duties[0].tasks || '值日';
+    const students = WORKDAYS.reduce((result, day) => {
+      const oldDuty = duties.find((item) => item.day === day);
+      return {
+        ...result,
+        [day]: oldDuty ? (oldDuty.group || '') : ''
+      };
+    }, {});
+    return [{
+      id: `duty-${Date.now()}`,
+      task,
+      students
+    }];
+  }
+
+  return duties.map((duty, index) => ({
+    id: duty.id || `duty-${index + 1}`,
+    task: duty.task || '未命名任务',
+    students: normalizeDutyStudents(duty.students)
+  }));
+}
+
 function defaultWorkspace() {
   return {
     timetable: makeTimetable(),
     periodTimes: DEFAULT_PERIOD_TIMES.map((item) => ({ ...item })),
     seats: makeSeats(),
-    duties: DAYS.map((day) => ({ day, group: '', tasks: '擦黑板、整理讲台、地面保洁' })),
+    duties: makeDuties(),
     committee: [
       { id: 'role-1', role: '班长', studentName: '', responsibility: '班级日常协调' },
       { id: 'role-2', role: '学习委员', studentName: '', responsibility: '作业与学习反馈' }
@@ -49,6 +96,7 @@ function normalizeWorkspace(workspace) {
   }));
   normalized.periodTimes = normalizePeriodTimes(normalized.periodTimes);
   normalized.seats = normalizeSeatLayout(normalized.seats);
+  normalized.duties = normalizeDuties(normalized.duties);
   return normalized;
 }
 
@@ -70,5 +118,6 @@ function buildWorkspacePayload(data) {
 module.exports = {
   buildWorkspacePayload,
   defaultWorkspace,
+  normalizeDuties,
   normalizeWorkspace
 };

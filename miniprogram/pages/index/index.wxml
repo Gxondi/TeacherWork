@@ -103,32 +103,41 @@
           <view class="podium">讲台</view>
         </view>
         <scroll-view class="seat-scroll" scroll-x enhanced show-scrollbar="{{true}}">
-          <view class="seat-grid" bindtouchstart="onSeatGridTouchStart" bindtouchmove="onSeatGridTouchMove" bindtouchend="onSeatGridTouchEnd">
-            <view
-              wx:for="{{seats}}"
-              wx:key="id"
-              id="seat-card-{{item.id}}"
-              class="seat-card {{item.selected ? 'selected' : ''}} {{item.deleted ? 'deleted' : ''}} {{item.aisleAfter ? 'aisle-after' : ''}}"
-              style="grid-column: {{item.gridCol}}; grid-row: {{item.row}};"
-              data-id="{{item.id}}"
-              bindtap="onSeatTap"
-            >
-              <text class="seat-label" wx:if="{{!item.deleted}}">{{item.label}}</text>
-              <text class="seat-name" wx:if="{{!item.deleted}}">{{item.studentName || '空座'}}</text>
+          <view class="seat-stage" style="min-width: {{seatStageWidth}}px;">
+            <view class="seat-grid" style="grid-template-columns: {{seatGridColumns}};" bindtouchstart="onSeatGridTouchStart" bindtouchmove="onSeatGridTouchMove" bindtouchend="onSeatGridTouchEnd">
+              <view
+                wx:for="{{seats}}"
+                wx:key="id"
+                id="seat-card-{{item.id}}"
+                class="seat-card {{item.selected ? 'selected' : ''}} {{item.deleted ? 'deleted' : ''}} {{item.aisleAfter ? 'aisle-after' : ''}}"
+                style="grid-column: {{item.gridCol}}; grid-row: {{item.row}};"
+                data-id="{{item.id}}"
+                bindtap="onSeatTap"
+              >
+                <text class="seat-label" wx:if="{{!item.deleted}}">{{item.label}}</text>
+                <text class="seat-name" wx:if="{{!item.deleted}}">{{item.studentName || '空座'}}</text>
+              </view>
             </view>
           </view>
         </scroll-view>
       </view>
 
       <view wx:elif="{{activeKey === 'duties'}}">
+        <view class="toolbar">
+          <button class="primary" bindtap="openDutyTaskModal">新增任务</button>
+        </view>
         <view class="duty-table">
-          <view class="duty-table-head">星期</view>
-          <view class="duty-table-head">值日学生/小组</view>
-          <view class="duty-table-head">任务</view>
-          <block wx:for="{{duties}}" wx:key="day">
-            <view class="duty-table-cell duty-day" data-index="{{index}}" bindtap="openDutyModal">{{item.day}}</view>
-            <view class="duty-table-cell strong" data-index="{{index}}" bindtap="openDutyModal">{{item.group || '未安排'}}</view>
-            <view class="duty-table-cell muted" data-index="{{index}}" bindtap="openDutyModal">{{item.tasks}}</view>
+          <view class="duty-table-head duty-task-head">任务</view>
+          <block wx:for="{{dutyDays}}" wx:key="*this">
+            <view class="duty-table-head">{{item}}</view>
+          </block>
+          <block wx:for="{{visibleDuties}}" wx:key="id">
+            <view class="duty-table-cell duty-task-cell" data-id="{{item.id}}" bindtap="openDutyTaskModal">{{item.task}}</view>
+            <block wx:for="{{item.cells}}" wx:key="day" wx:for-item="cell">
+              <view class="duty-table-cell duty-student-cell {{cell.studentNames ? 'filled' : ''}}" data-id="{{item.id}}" data-day="{{cell.day}}" bindtap="openDutyStudentModal">
+                {{cell.studentNames || '添加学生'}}
+              </view>
+            </block>
           </block>
         </view>
       </view>
@@ -349,10 +358,15 @@
 
 <view class="modal-mask" wx:if="{{dutyModalVisible}}" bindtap="closeModal">
   <view class="modal" catchtap="noop">
-    <view class="modal-title">编辑值日</view>
-    <input class="field" placeholder="值日学生或小组" value="{{dutyForm.group}}" data-field="group" bindinput="onDutyInput" />
-    <input class="field" placeholder="值日任务" value="{{dutyForm.tasks}}" data-field="tasks" bindinput="onDutyInput" />
+    <view class="modal-title">{{dutyModalMode === 'task' ? '值日任务' : dutyForm.day + ' · ' + dutyForm.task}}</view>
+    <block wx:if="{{dutyModalMode === 'task'}}">
+      <input class="field" placeholder="任务名称，例如：擦黑板" value="{{dutyForm.task}}" data-field="task" bindinput="onDutyInput" />
+    </block>
+    <block wx:else>
+      <input class="field" placeholder="学生姓名，多个可用顿号分隔" value="{{dutyForm.studentNames}}" data-field="studentNames" bindinput="onDutyInput" />
+    </block>
     <view class="modal-actions">
+      <button wx:if="{{dutyModalMode === 'task' && editingId}}" class="text-danger" bindtap="deleteDutyTask">删除</button>
       <button class="secondary" bindtap="closeModal">取消</button>
       <button class="primary" bindtap="saveDuty">保存</button>
     </view>

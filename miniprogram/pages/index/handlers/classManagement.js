@@ -14,12 +14,37 @@ function buildImportFields(mapping = defaultMapping()) {
 }
 
 module.exports = {
-  openDutyModal(event) {
-    const index = Number(event.currentTarget.dataset.index);
+  openDutyTaskModal(event) {
+    const id = event.currentTarget.dataset.id || '';
+    const duty = id ? this.data.duties.find((item) => item.id === id) : null;
     this.setData({
       dutyModalVisible: true,
-      editingId: String(index),
-      dutyForm: { ...this.data.duties[index] }
+      dutyModalMode: 'task',
+      editingId: id,
+      dutyForm: {
+        id: id || `duty-${Date.now()}`,
+        task: duty ? duty.task : '',
+        students: duty ? { ...duty.students } : {}
+      }
+    });
+  },
+
+  openDutyStudentModal(event) {
+    const id = event.currentTarget.dataset.id;
+    const day = event.currentTarget.dataset.day;
+    const duty = this.data.duties.find((item) => item.id === id);
+    if (!duty || !day) return;
+
+    this.setData({
+      dutyModalVisible: true,
+      dutyModalMode: 'student',
+      editingId: id,
+      dutyForm: {
+        id,
+        day,
+        task: duty.task,
+        studentNames: duty.students[day] || ''
+      }
     });
   },
 
@@ -29,11 +54,70 @@ module.exports = {
   },
 
   saveDuty() {
-    const index = Number(this.data.editingId);
-    const duties = this.data.duties.map((duty, dutyIndex) => (
-      dutyIndex === index ? { ...duty, ...this.data.dutyForm } : duty
-    ));
-    this.setData({ duties, dutyModalVisible: false }, () => this.saveWorkspace());
+    const form = this.data.dutyForm;
+    let duties = this.data.duties;
+
+    if (this.data.dutyModalMode === 'task') {
+      const task = String(form.task || '').trim();
+      if (!task) {
+        wx.showToast({ title: '请填写任务名称', icon: 'none' });
+        return;
+      }
+
+      const exists = duties.some((duty) => duty.id === form.id);
+      const dutyItem = {
+        id: form.id,
+        task,
+        students: form.students || this.data.dutyDays.reduce((result, day) => ({
+          ...result,
+          [day]: ''
+        }), {})
+      };
+      duties = exists
+        ? duties.map((duty) => (duty.id === form.id ? { ...duty, task } : duty))
+        : [...duties, dutyItem];
+    } else {
+      duties = duties.map((duty) => {
+        if (duty.id !== form.id) return duty;
+        return {
+          ...duty,
+          students: {
+            ...duty.students,
+            [form.day]: String(form.studentNames || '').trim()
+          }
+        };
+      });
+    }
+
+    this.setData({
+      duties,
+      visibleDuties: this.buildDutyRows(duties),
+      dutyModalVisible: false
+    }, () => this.saveWorkspace());
+  },
+
+  deleteDutyTask() {
+    const id = this.data.editingId;
+    if (!id) {
+      this.setData({ dutyModalVisible: false });
+      return;
+    }
+
+    wx.showModal({
+      title: '删除任务',
+      content: '确定删除这条值日任务吗？该行已填写的学生也会删除。',
+      confirmText: '删除',
+      confirmColor: '#dc2626',
+      success: (res) => {
+        if (!res.confirm) return;
+        const duties = this.data.duties.filter((duty) => duty.id !== id);
+        this.setData({
+          duties,
+          visibleDuties: this.buildDutyRows(duties),
+          dutyModalVisible: false
+        }, () => this.saveWorkspace());
+      }
+    });
   },
 
   openCommitteeModal(event) {

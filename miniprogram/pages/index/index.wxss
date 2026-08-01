@@ -516,15 +516,20 @@
   overflow: hidden;
 }
 
+.seat-stage {
+  box-sizing: border-box;
+  display: flex;
+  justify-content: center;
+}
+
 .seat-grid {
   box-sizing: border-box;
   display: grid;
-  grid-auto-columns: 82rpx;
-  grid-auto-rows: 68rpx;
+  grid-auto-columns: 90rpx;
+  grid-auto-rows: 70rpx;
   grid-auto-flow: column;
-  gap: 10rpx 6rpx;
+  gap: 11rpx 8rpx;
   width: max-content;
-  min-width: 100%;
   padding: 20rpx;
 }
 
@@ -534,7 +539,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 68rpx;
+  width: 100%;
+  height: 100%;
+  min-height: 70rpx;
   padding: 6rpx;
   border: 1rpx solid #d8e7ff;
   border-radius: 12rpx;
@@ -554,7 +561,7 @@
 }
 
 .seat-card.aisle-after {
-  margin-right: 14rpx;
+  margin-right: 0;
 }
 
 .seat-label {
@@ -581,7 +588,7 @@
 
 .duty-table {
   display: grid;
-  grid-template-columns: 104rpx 1fr 1.7fr;
+  grid-template-columns: minmax(112rpx, 1.18fr) repeat(5, minmax(0, 1fr));
   border: 1rpx solid #ffe0ea;
   border-radius: 20rpx;
   background: rgba(255, 255, 255, 0.86);
@@ -608,8 +615,33 @@
 .duty-table-cell {
   display: flex;
   align-items: center;
+  justify-content: center;
   color: #4f404c;
   font-size: 23rpx;
+  line-height: 1.2;
+  text-align: center;
+  word-break: break-all;
+}
+
+.duty-task-head,
+.duty-task-cell {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.duty-task-cell {
+  color: #1f2937;
+  font-weight: 800;
+}
+
+.duty-student-cell {
+  color: #c18ca2;
+  font-weight: 700;
+}
+
+.duty-student-cell.filled {
+  color: #4f404c;
+  background: #fff8fb;
 }
 
 .duty-row,
@@ -1169,14 +1201,14 @@
   }
 
   .seat-grid {
-    grid-auto-columns: 78rpx;
-    grid-auto-rows: 64rpx;
-    gap: 9rpx 5rpx;
+    grid-auto-columns: 84rpx;
+    grid-auto-rows: 66rpx;
+    gap: 10rpx 7rpx;
     padding: 16rpx;
   }
 
   .seat-card.aisle-after {
-    margin-right: 10rpx;
+    margin-right: 0;
   }
 
   .seat-name {
@@ -1193,7 +1225,7 @@
   }
 
   .duty-table {
-    grid-template-columns: 76rpx 1fr 1.45fr;
+    grid-template-columns: minmax(84rpx, 1.05fr) repeat(5, minmax(0, 1fr));
   }
 
   .duty-table-head,

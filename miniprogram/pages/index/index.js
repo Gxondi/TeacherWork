@@ -1,9 +1,10 @@
 const app = getApp();
 
-const { todayText } = require('../../utils/date');
+const { schoolYears, todayText } = require('../../utils/date');
 const {
   COLORS,
   PERIODS,
+  WORKDAYS,
   getVisibleTimetable
 } = require('../../utils/timetable');
 const {
@@ -19,14 +20,31 @@ const classManagementHandlers = require('./handlers/classManagement');
 const homeSchoolHandlers = require('./handlers/homeSchool');
 const { IMPORT_FIELDS, defaultMapping } = require('../../utils/importRoster');
 
-const YEARS = ['2026-2027', '2025-2026', '2024-2025', '2023-2024', '2022-2023', '2021-2022', '2020-2021'];
-
 function buildImportFields() {
   const mapping = defaultMapping();
   return IMPORT_FIELDS.map((field) => ({
     ...field,
     value: mapping[field.key] || ''
   }));
+}
+
+function buildDutyRows(duties, dutyDays) {
+  return duties.map((duty) => ({
+    ...duty,
+    cells: dutyDays.map((day) => ({
+      day,
+      studentNames: duty.students && duty.students[day] ? duty.students[day] : ''
+    }))
+  }));
+}
+
+function buildSeatGridColumns(seats) {
+  if (!seats.length) return '';
+  const occupiedColumns = new Set(seats.map((seat) => Number(seat.gridCol)).filter(Boolean));
+  const maxColumn = Math.max(...occupiedColumns);
+  return Array.from({ length: maxColumn }, (_, index) => (
+    occupiedColumns.has(index + 1) ? '90rpx' : '30rpx'
+  )).join(' ');
 }
 
 const navGroups = [
@@ -51,10 +69,11 @@ const navGroups = [
 ];
 
 function initialData() {
+  const years = schoolYears();
   return {
     today: todayText(),
-    years: YEARS,
-    schoolYear: YEARS[0],
+    years,
+    schoolYear: years[0],
     cloudReady: false,
     syncState: '本地体验',
     teacherProfile: {
@@ -67,8 +86,11 @@ function initialData() {
     activeTitle: '首页',
     colors: COLORS,
     periodLabels: PERIODS,
+    dutyDays: WORKDAYS,
     selectedSeatIds: [],
     sourceSeatIds: [],
+    seatStageWidth: 0,
+    seatGridColumns: '',
     batchPhase: 'source',
     batchButtonText: '批量滑选',
     batchSelecting: false,
@@ -94,6 +116,7 @@ function initialData() {
     },
     seatForm: {},
     dutyForm: {},
+    dutyModalMode: '',
     committeeForm: {},
     studentForm: {},
     todoForm: {},
@@ -115,6 +138,7 @@ function initialData() {
     periodTimes: [],
     seats: [],
     duties: [],
+    visibleDuties: [],
     committee: [],
     students: [],
     todos: []
@@ -150,7 +174,9 @@ const pageCore = {
     const workspace = normalizeWorkspace(cached || defaultWorkspace());
     this.setData({
       ...workspace,
-      visibleTimetable: getVisibleTimetable(workspace.timetable)
+      visibleTimetable: getVisibleTimetable(workspace.timetable),
+      visibleDuties: this.buildDutyRows(workspace.duties),
+      seatGridColumns: this.buildSeatGridColumns(workspace.seats)
     }, () => this.refreshSummary());
   },
 
@@ -173,7 +199,8 @@ const pageCore = {
       .then(() => {
         this.setData({ syncState: '已同步 CloudBase' });
       })
-      .catch(() => {
+      .catch((error) => {
+        console.error('CloudBase syncWorkspace failed:', error);
         this.setData({ syncState: 'CloudBase 同步失败，已保存在本地' });
       });
   },
@@ -182,6 +209,14 @@ const pageCore = {
     this.setData({
       visibleTimetable: getVisibleTimetable(this.data.timetable)
     });
+  },
+
+  buildDutyRows(duties = this.data.duties) {
+    return buildDutyRows(duties, this.data.dutyDays);
+  },
+
+  buildSeatGridColumns(seats = this.data.seats) {
+    return buildSeatGridColumns(seats);
   },
 
   loadTeacherProfile() {
@@ -288,7 +323,32 @@ const pageCore = {
     this.setData({
       activeKey: key,
       activeTitle: item ? item.label : '首页'
+    }, () => {
+      if (key === 'seats') {
+        this.updateSeatStageWidth();
+      }
     });
+  },
+
+  updateSeatStageWidth() {
+    const queryWidth = () => {
+      wx.createSelectorQuery()
+        .in(this)
+        .select('.seat-scroll')
+        .boundingClientRect((rect) => {
+          if (rect && rect.width) {
+            this.setData({ seatStageWidth: Math.floor(rect.width) });
+          }
+        })
+        .exec();
+    };
+
+    if (wx.nextTick) {
+      wx.nextTick(queryWidth);
+      return;
+    }
+
+    queryWidth();
   },
 
   refreshSummary() {

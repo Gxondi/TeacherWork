@@ -170,10 +170,11 @@ module.exports = {
       confirmColor: '#dc2626',
       success: (res) => {
         if (!res.confirm) return;
-        this.setData({
-          seats: [],
-          selectedSeatIds: [],
-          sourceSeatIds: [],
+      this.setData({
+        seats: [],
+        seatGridColumns: '',
+        selectedSeatIds: [],
+        sourceSeatIds: [],
           batchPhase: 'source',
           batchButtonText: '批量滑选',
           batchSelecting: false
@@ -240,10 +241,14 @@ module.exports = {
       const seats = buildSeatLayout(form.rows, seatsPerColumn);
       this.setData({
         seats,
+        seatGridColumns: this.buildSeatGridColumns(seats),
         selectedSeatIds: [],
         batchSelecting: false,
         seatWizardVisible: false
-      }, () => this.saveWorkspace());
+      }, () => {
+        this.updateSeatStageWidth();
+        this.saveWorkspace();
+      });
       return;
     }
 

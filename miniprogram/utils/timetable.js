@@ -1,6 +1,7 @@
 const DAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 const PERIODS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 const WORKDAY_COUNT = 5;
+const WORKDAYS = DAYS.slice(0, WORKDAY_COUNT);
 
 const DEFAULT_PERIOD_TIMES = [
   { period: 1, startTime: '08:00', endTime: '09:00' },
@@ -88,6 +89,7 @@ module.exports = {
   DAYS,
   DEFAULT_PERIOD_TIMES,
   PERIODS,
+  WORKDAYS,
   getVisibleTimetable,
   makeTimetable,
   normalizeCell,
