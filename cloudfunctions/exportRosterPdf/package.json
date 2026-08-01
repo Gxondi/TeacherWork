@@ -1,0 +1,10 @@
+{
+  "name": "export-roster-pdf",
+  "version": "1.0.0",
+  "description": "Export roster PDF",
+  "main": "index.js",
+  "dependencies": {
+    "pdfkit": "0.15.0",
+    "wx-server-sdk": "^3.0.1"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "pages": [
+    "pages/index/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "教师工作台",
+    "navigationBarBackgroundColor": "#f6f8fb",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f6f8fb"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

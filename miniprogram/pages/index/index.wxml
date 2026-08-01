@@ -1,0 +1,416 @@
+<view class="page-shell">
+  <view class="topbar">
+    <view class="top-main">
+      <view class="title">教师工作台</view>
+      <view class="date-text">{{today}} · {{syncState}}</view>
+    </view>
+
+    <scroll-view class="year-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+      <view class="year-track">
+        <view
+          wx:for="{{years}}"
+          wx:key="*this"
+          class="year-chip {{schoolYear === item ? 'active' : ''}}"
+          data-year="{{item}}"
+          bindtap="onYearTap"
+        >{{item}}</view>
+      </view>
+    </scroll-view>
+  </view>
+
+  <view class="main-layout">
+    <view class="sidebar">
+      <block wx:for="{{navGroups}}" wx:key="title">
+        <view class="nav-group-title">{{item.title}}</view>
+        <block wx:for="{{item.items}}" wx:key="key" wx:for-item="nav">
+          <view class="nav-item {{activeKey === nav.key ? 'active' : ''}}" data-key="{{nav.key}}" bindtap="onNavTap">
+            <view class="nav-icon">{{nav.icon}}</view>
+            <view class="nav-label">{{nav.label}}</view>
+          </view>
+        </block>
+      </block>
+    </view>
+
+    <scroll-view class="content" scroll-y>
+      <view class="section-head">
+        <view class="section-title">{{activeTitle}}</view>
+      </view>
+
+      <view wx:if="{{activeKey === 'dashboard'}}">
+        <view class="welcome-panel">
+          <view class="welcome-avatar" bindtap="login">
+            <image wx:if="{{teacherProfile}}" src="{{teacherProfile.avatarUrl}}" mode="aspectFill"></image>
+            <text wx:else>师</text>
+          </view>
+          <view class="welcome-copy">
+            <view class="welcome-title">早安，{{teacherProfile ? teacherProfile.nickName : '老师'}}</view>
+            <view class="welcome-sub">今天也要把班级事务安排得清清楚楚</view>
+          </view>
+        </view>
+
+        <view class="summary-grid">
+          <view class="summary-card" wx:for="{{summaryCards}}" wx:key="label">
+            <view class="summary-icon">{{item.icon}}</view>
+            <view class="summary-value">{{item.value}}</view>
+            <view class="summary-label">{{item.label}}</view>
+          </view>
+        </view>
+
+        <view class="module-heading">
+          <view>
+            <view class="module-title">本周课程表</view>
+            <view class="module-sub">点击课程格编辑科目；点击节次编辑统一上课时间</view>
+          </view>
+        </view>
+
+        <view class="table-scroll">
+          <view class="timetable">
+            <view class="time-col header-cell">节次</view>
+            <block wx:for="{{visibleTimetable}}" wx:key="day">
+              <view class="day-head">{{item.day}}</view>
+            </block>
+            <block wx:for="{{periodTimes}}" wx:key="period" wx:for-item="periodItem">
+              <view class="time-col period-cell" data-period="{{periodItem.period}}" bindtap="openPeriodModal">
+                <text class="period-name">{{periodItem.label}}</text>
+                <text class="period-time">{{periodItem.timeText}}</text>
+              </view>
+              <block wx:for="{{visibleTimetable}}" wx:key="day" wx:for-item="dayRow">
+                <block wx:for="{{dayRow.cells}}" wx:key="id" wx:for-item="cell">
+                  <view
+                    wx:if="{{cell.period === periodItem.period}}"
+                    class="course-cell {{cell.filledClass}}"
+                    style="background: {{cell.color}};"
+                    data-id="{{cell.id}}"
+                    bindtap="openCellModal"
+                  >
+                    <view class="course-name">{{cell.subjectText}}</view>
+                  </view>
+                </block>
+              </block>
+            </block>
+          </view>
+        </view>
+      </view>
+
+      <view wx:elif="{{activeKey === 'seats'}}">
+        <view class="seat-actions">
+          <button class="primary" bindtap="addSeat">生成座位表</button>
+          <button class="secondary {{batchSelecting ? 'on' : ''}}" bindtap="toggleBatchSeats">{{batchButtonText}}</button>
+          <button class="secondary" bindtap="swapSelectedSeats">交换</button>
+          <button class="secondary" bindtap="clearSelectedSeats">清空所选</button>
+          <button class="secondary danger" bindtap="clearSeatLayout">清空座位表</button>
+        </view>
+        <view class="podium-row">
+          <view class="podium">讲台</view>
+        </view>
+        <scroll-view class="seat-scroll" scroll-x enhanced show-scrollbar="{{true}}">
+          <view class="seat-grid" bindtouchstart="onSeatGridTouchStart" bindtouchmove="onSeatGridTouchMove" bindtouchend="onSeatGridTouchEnd">
+            <view
+              wx:for="{{seats}}"
+              wx:key="id"
+              id="seat-card-{{item.id}}"
+              class="seat-card {{item.selected ? 'selected' : ''}} {{item.deleted ? 'deleted' : ''}} {{item.aisleAfter ? 'aisle-after' : ''}}"
+              style="grid-column: {{item.gridCol}}; grid-row: {{item.row}};"
+              data-id="{{item.id}}"
+              bindtap="onSeatTap"
+            >
+              <text class="seat-label" wx:if="{{!item.deleted}}">{{item.label}}</text>
+              <text class="seat-name" wx:if="{{!item.deleted}}">{{item.studentName || '空座'}}</text>
+            </view>
+          </view>
+        </scroll-view>
+      </view>
+
+      <view wx:elif="{{activeKey === 'duties'}}">
+        <view class="duty-table">
+          <view class="duty-table-head">星期</view>
+          <view class="duty-table-head">值日学生/小组</view>
+          <view class="duty-table-head">任务</view>
+          <block wx:for="{{duties}}" wx:key="day">
+            <view class="duty-table-cell duty-day" data-index="{{index}}" bindtap="openDutyModal">{{item.day}}</view>
+            <view class="duty-table-cell strong" data-index="{{index}}" bindtap="openDutyModal">{{item.group || '未安排'}}</view>
+            <view class="duty-table-cell muted" data-index="{{index}}" bindtap="openDutyModal">{{item.tasks}}</view>
+          </block>
+        </view>
+      </view>
+
+      <view wx:elif="{{activeKey === 'committee'}}">
+        <view class="toolbar">
+          <button class="primary" bindtap="openCommitteeModal">新增班委</button>
+        </view>
+        <view class="card-grid">
+          <view class="role-card" wx:for="{{committee}}" wx:key="id">
+            <view class="role-title">{{item.role || '未命名职务'}}</view>
+            <view class="role-name">{{item.studentName || '待指定'}}</view>
+            <view class="role-desc">{{item.responsibility || '暂无职责说明'}}</view>
+            <view class="card-actions">
+              <button class="text-button" data-id="{{item.id}}" bindtap="openCommitteeModal">编辑</button>
+              <button class="text-danger" data-id="{{item.id}}" bindtap="deleteCommittee">删除</button>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view wx:elif="{{activeKey === 'roster'}}">
+        <view class="toolbar">
+          <button class="primary" bindtap="openStudentModal">新增学生</button>
+          <button class="secondary" bindtap="openRosterImport">导入表格</button>
+          <button class="secondary" bindtap="exportRosterPdf">导出 PDF</button>
+        </view>
+        <view class="table-list">
+          <view class="student-row" wx:for="{{students}}" wx:key="id">
+            <view>
+              <view class="strong">{{item.studentNo}} {{item.name}}</view>
+              <view class="muted">
+                {{item.gender}} ·
+                <text class="phone-link {{item.phone ? '' : 'empty'}}" data-phone="{{item.phone}}" bindtap="callPhone">{{item.phone || '无学生电话'}}</text>
+              </view>
+            </view>
+            <view>
+              <view>{{item.guardianName || '未填家长'}}</view>
+              <view class="muted">
+                {{item.guardianRelation}}
+                <text class="phone-link {{item.guardianPhone ? '' : 'empty'}}" data-phone="{{item.guardianPhone}}" bindtap="callPhone">{{item.guardianPhone || '无家长电话'}}</text>
+              </view>
+            </view>
+            <view class="row-actions">
+              <button class="text-button" data-id="{{item.id}}" bindtap="openStudentModal">编辑</button>
+              <button class="text-danger" data-id="{{item.id}}" bindtap="deleteStudent">删除</button>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view wx:elif="{{activeKey === 'contacts'}}">
+        <view class="table-list">
+          <view class="student-row" wx:for="{{students}}" wx:key="id">
+            <view>
+              <view class="strong">{{item.name}}</view>
+              <view class="muted">
+                学生电话
+                <text class="phone-link {{item.phone ? '' : 'empty'}}" data-phone="{{item.phone}}" bindtap="callPhone">{{item.phone || '未填写'}}</text>
+              </view>
+            </view>
+            <view>
+              <view>{{item.guardianName || '未填家长'}} {{item.guardianRelation}}</view>
+              <view class="muted">
+                家长电话
+                <text class="phone-link {{item.guardianPhone ? '' : 'empty'}}" data-phone="{{item.guardianPhone}}" bindtap="callPhone">{{item.guardianPhone || '未填写'}}</text>
+              </view>
+            </view>
+            <button class="text-button" data-id="{{item.id}}" bindtap="openStudentModal">维护信息</button>
+          </view>
+        </view>
+      </view>
+
+      <view wx:elif="{{activeKey === 'familySchedule'}}">
+        <view class="toolbar">
+          <button class="secondary" bindtap="copyFamilySchedule">复制课程表</button>
+        </view>
+        <view class="family-table">
+          <view class="family-head">节次</view>
+          <block wx:for="{{visibleTimetable}}" wx:key="day">
+            <view class="family-head">{{item.day}}</view>
+          </block>
+          <block wx:for="{{periodTimes}}" wx:key="period" wx:for-item="periodItem">
+            <view class="family-period">
+              <text>{{periodItem.label}}</text>
+              <text class="family-period-time">{{periodItem.timeText}}</text>
+            </view>
+            <block wx:for="{{visibleTimetable}}" wx:key="day" wx:for-item="dayRow">
+              <block wx:for="{{dayRow.cells}}" wx:key="id" wx:for-item="cell">
+                <view
+                  wx:if="{{cell.period === periodItem.period}}"
+                  class="family-course {{cell.filledClass}}"
+                  style="background: {{cell.color}};"
+                >{{cell.subjectText || '未安排'}}</view>
+              </block>
+            </block>
+          </block>
+        </view>
+      </view>
+
+      <view wx:elif="{{activeKey === 'todos'}}">
+        <view class="toolbar">
+          <button class="primary" bindtap="openTodoModal">新增待办</button>
+          <view class="hint">提示会在小程序打开期间触发</view>
+        </view>
+        <view class="todo-list">
+          <view class="todo-row {{item.done ? 'done' : ''}}" wx:for="{{todos}}" wx:key="id">
+            <checkbox checked="{{item.done}}" data-id="{{item.id}}" bindtap="toggleTodo"></checkbox>
+            <view class="todo-main">
+              <view class="strong">{{item.title}}</view>
+              <view class="muted">{{item.dueDate || '今天'}} {{item.dueTime}}</view>
+            </view>
+            <button class="text-button" data-id="{{item.id}}" bindtap="openTodoModal">编辑</button>
+            <button class="text-danger" data-id="{{item.id}}" bindtap="deleteTodo">删除</button>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+</view>
+
+<view class="modal-mask" wx:if="{{cellModalVisible}}" bindtap="closeModal">
+  <view class="modal" catchtap="noop">
+    <view class="modal-title">编辑科目</view>
+    <input class="field" placeholder="科目，例如：语文课" value="{{cellForm.subject}}" bindinput="onSubjectInput" />
+    <view class="color-row">
+      <button wx:for="{{colors}}" wx:key="value" class="color-dot {{cellForm.color === item.value ? 'picked' : ''}}" style="background: {{item.value}};" data-color="{{item.value}}" bindtap="onColorPick">{{item.name}}</button>
+    </view>
+    <view class="modal-actions">
+      <button class="secondary" bindtap="clearCell">清空</button>
+      <button class="primary" bindtap="saveCell">保存</button>
+    </view>
+  </view>
+</view>
+
+<view class="modal-mask" wx:if="{{periodModalVisible}}" bindtap="closeModal">
+  <view class="modal" catchtap="noop">
+    <view class="modal-title">编辑第{{periodForm.period}}节时间</view>
+    <view class="time-row">
+      <picker mode="time" value="{{periodForm.startTime}}" data-field="startTime" bindchange="onPeriodTimeChange">
+        <view class="field picker-field">开始 {{periodForm.startTime || '选择'}}</view>
+      </picker>
+      <picker mode="time" value="{{periodForm.endTime}}" data-field="endTime" bindchange="onPeriodTimeChange">
+        <view class="field picker-field">结束 {{periodForm.endTime || '选择'}}</view>
+      </picker>
+    </view>
+    <view class="modal-actions">
+      <button class="secondary" bindtap="closeModal">取消</button>
+      <button class="primary" bindtap="savePeriodTime">保存</button>
+    </view>
+  </view>
+</view>
+
+<view class="modal-mask" wx:if="{{seatWizardVisible}}" bindtap="closeModal">
+  <view class="modal" catchtap="noop">
+    <view class="modal-title">生成座位表</view>
+    <view class="wizard-step" wx:if="{{seatWizardForm.stage === 'setup'}}">
+      <view class="wizard-copy">先确定座位大结构。排是从讲台往后数有几排；列是横向有几组座位，每组之间会自动留走廊。</view>
+      <view class="field-label">排数：从讲台往后有几排</view>
+      <input class="field" type="number" placeholder="必填，例如 5" value="{{seatWizardForm.rows}}" data-field="rows" bindinput="onSeatWizardInput" />
+      <view class="field-label">列数：横向有几组座位</view>
+      <input class="field" type="number" placeholder="必填，例如 4" value="{{seatWizardForm.columnCount}}" data-field="columnCount" bindinput="onSeatWizardInput" />
+      <view class="modal-actions">
+        <button class="secondary" bindtap="closeModal">取消</button>
+        <button class="primary" bindtap="startSeatWizardColumns">下一步</button>
+      </view>
+    </view>
+
+    <view class="wizard-step" wx:else>
+      <view class="wizard-copy">第{{seatWizardForm.currentColumn}}列每一排放几个座位？</view>
+      <view class="wizard-progress">已设置 {{seatWizardForm.seatsPerColumn.length}} / {{seatWizardForm.columnCount}} 列</view>
+      <view class="choice-row">
+        <button class="choice-button" data-count="1" bindtap="chooseSeatColumnType">单人座</button>
+        <button class="choice-button" data-count="2" bindtap="chooseSeatColumnType">双人座</button>
+        <button class="choice-button" data-count="3" bindtap="chooseSeatColumnType">三人座</button>
+        <button class="choice-button" data-count="4" bindtap="chooseSeatColumnType">四人座</button>
+      </view>
+      <view class="modal-actions">
+        <button class="secondary" bindtap="resetSeatWizard">重来</button>
+      </view>
+    </view>
+  </view>
+</view>
+
+<view class="modal-mask" wx:if="{{seatModalVisible}}" bindtap="closeModal">
+  <view class="modal" catchtap="noop">
+    <view class="modal-title">编辑座位</view>
+    <input class="field" placeholder="座位编号" value="{{seatForm.label}}" data-field="label" bindinput="onSeatInput" />
+    <input class="field" placeholder="学生姓名" value="{{seatForm.studentName}}" data-field="studentName" bindinput="onSeatInput" />
+    <input class="field" placeholder="备注" value="{{seatForm.note}}" data-field="note" bindinput="onSeatInput" />
+    <view class="modal-actions">
+      <button class="text-danger" bindtap="deleteSeat">删除座位</button>
+      <button class="secondary" bindtap="closeModal">取消</button>
+      <button class="primary" bindtap="saveSeat">保存</button>
+    </view>
+  </view>
+</view>
+
+<view class="modal-mask" wx:if="{{dutyModalVisible}}" bindtap="closeModal">
+  <view class="modal" catchtap="noop">
+    <view class="modal-title">编辑值日</view>
+    <input class="field" placeholder="值日学生或小组" value="{{dutyForm.group}}" data-field="group" bindinput="onDutyInput" />
+    <input class="field" placeholder="值日任务" value="{{dutyForm.tasks}}" data-field="tasks" bindinput="onDutyInput" />
+    <view class="modal-actions">
+      <button class="secondary" bindtap="closeModal">取消</button>
+      <button class="primary" bindtap="saveDuty">保存</button>
+    </view>
+  </view>
+</view>
+
+<view class="modal-mask" wx:if="{{committeeModalVisible}}" bindtap="closeModal">
+  <view class="modal" catchtap="noop">
+    <view class="modal-title">班委信息</view>
+    <input class="field" placeholder="职务" value="{{committeeForm.role}}" data-field="role" bindinput="onCommitteeInput" />
+    <input class="field" placeholder="学生姓名" value="{{committeeForm.studentName}}" data-field="studentName" bindinput="onCommitteeInput" />
+    <input class="field" placeholder="职责" value="{{committeeForm.responsibility}}" data-field="responsibility" bindinput="onCommitteeInput" />
+    <view class="modal-actions">
+      <button class="secondary" bindtap="closeModal">取消</button>
+      <button class="primary" bindtap="saveCommittee">保存</button>
+    </view>
+  </view>
+</view>
+
+<view class="modal-mask" wx:if="{{rosterImportVisible}}" bindtap="closeModal">
+  <view class="modal large" catchtap="noop">
+    <view class="modal-title">导入花名册</view>
+    <view class="wizard-copy">选择 CSV/Excel 文件，再填写每个信息所在列。列可以填 A、B、C，也可以填 1、2、3。</view>
+    <button class="secondary import-file-button" bindtap="chooseRosterFile">{{rosterImportForm.fileName || '选择 CSV / Excel 文件'}}</button>
+    <view class="field-label">数据从第几行开始</view>
+    <input class="field" type="number" placeholder="例如 2，跳过表头" value="{{rosterImportForm.startRow}}" data-field="startRow" bindinput="onRosterImportInput" />
+    <view class="mapping-grid">
+      <view class="mapping-item" wx:for="{{rosterImportFields}}" wx:key="key">
+        <view class="field-label">{{item.label}}{{item.required ? '（必填）' : ''}}</view>
+        <input class="field mapping-field" placeholder="{{item.placeholder}}" value="{{item.value}}" data-field="{{item.key}}" bindinput="onRosterMappingInput" />
+      </view>
+    </view>
+    <view class="modal-actions">
+      <button class="secondary" bindtap="buildRosterPreview">生成预览</button>
+      <button class="primary" bindtap="confirmRosterImport">确认导入</button>
+    </view>
+    <view class="import-preview" wx:if="{{rosterImportForm.previewStudents.length}}">
+      <view class="import-preview-title">预览 {{rosterImportForm.previewStudents.length}} 条</view>
+      <view class="import-preview-row" wx:for="{{rosterImportForm.previewStudents}}" wx:key="id">
+        <view class="strong">{{item.studentNo}} {{item.name}}</view>
+        <view class="muted">{{item.guardianName}} {{item.guardianRelation}} {{item.guardianPhone}}</view>
+      </view>
+    </view>
+  </view>
+</view>
+
+<view class="modal-mask" wx:if="{{studentModalVisible}}" bindtap="closeModal">
+  <view class="modal large" catchtap="noop">
+    <view class="modal-title">学生与家长信息</view>
+    <input class="field" placeholder="学号" value="{{studentForm.studentNo}}" data-field="studentNo" bindinput="onStudentInput" />
+    <input class="field" placeholder="学生姓名" value="{{studentForm.name}}" data-field="name" bindinput="onStudentInput" />
+    <input class="field" placeholder="性别" value="{{studentForm.gender}}" data-field="gender" bindinput="onStudentInput" />
+    <input class="field" placeholder="学生电话" value="{{studentForm.phone}}" data-field="phone" bindinput="onStudentInput" />
+    <input class="field" placeholder="家庭住址" value="{{studentForm.address}}" data-field="address" bindinput="onStudentInput" />
+    <input class="field" placeholder="家长姓名" value="{{studentForm.guardianName}}" data-field="guardianName" bindinput="onStudentInput" />
+    <input class="field" placeholder="关系" value="{{studentForm.guardianRelation}}" data-field="guardianRelation" bindinput="onStudentInput" />
+    <input class="field" placeholder="家长电话" value="{{studentForm.guardianPhone}}" data-field="guardianPhone" bindinput="onStudentInput" />
+    <view class="modal-actions">
+      <button class="secondary" bindtap="closeModal">取消</button>
+      <button class="primary" bindtap="saveStudent">保存</button>
+    </view>
+  </view>
+</view>
+
+<view class="modal-mask" wx:if="{{todoModalVisible}}" bindtap="closeModal">
+  <view class="modal" catchtap="noop">
+    <view class="modal-title">待办事项</view>
+    <input class="field" placeholder="待办内容" value="{{todoForm.title}}" data-field="title" bindinput="onTodoInput" />
+    <picker mode="date" value="{{todoForm.dueDate}}" bindchange="onTodoDateChange">
+      <view class="field picker-field">日期 {{todoForm.dueDate || '今天'}}</view>
+    </picker>
+    <picker mode="time" value="{{todoForm.dueTime}}" bindchange="onTodoTimeChange">
+      <view class="field picker-field">提醒时间 {{todoForm.dueTime || '选择'}}</view>
+    </picker>
+    <view class="modal-actions">
+      <button class="secondary" bindtap="closeModal">取消</button>
+      <button class="primary" bindtap="saveTodo">保存</button>
+    </view>
+  </view>
+</view>

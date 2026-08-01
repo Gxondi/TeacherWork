@@ -1,0 +1,6 @@
+{
+  "teacher_workspaces": {
+    "read": "auth.openid == doc._openid",
+    "write": "auth.openid == doc._openid"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "import-roster-excel",
+  "version": "1.0.0",
+  "description": "Import roster data from Excel files",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "^3.0.1",
+    "xlsx": "0.18.5"
+  }
+}
