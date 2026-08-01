@@ -57,7 +57,10 @@ function initialData() {
     schoolYear: YEARS[0],
     cloudReady: false,
     syncState: '本地体验',
-    teacherProfile: null,
+    teacherProfile: {
+      nickName: '',
+      avatarUrl: ''
+    },
     summaryCards: [],
     navGroups,
     activeKey: 'dashboard',
@@ -78,6 +81,7 @@ function initialData() {
     studentModalVisible: false,
     todoModalVisible: false,
     rosterImportVisible: false,
+    teacherProfileModalVisible: false,
     editingId: '',
     cellForm: {},
     periodForm: {},
@@ -93,6 +97,10 @@ function initialData() {
     committeeForm: {},
     studentForm: {},
     todoForm: {},
+    teacherProfileForm: {
+      nickName: '',
+      avatarUrl: ''
+    },
     rosterImportFields: buildImportFields(),
     rosterImportForm: {
       fileName: '',
@@ -183,6 +191,56 @@ const pageCore = {
     }
   },
 
+  openTeacherProfileModal() {
+    this.setData({
+      teacherProfileModalVisible: true,
+      teacherProfileForm: {
+        nickName: this.data.teacherProfile.nickName || '',
+        avatarUrl: this.data.teacherProfile.avatarUrl || ''
+      }
+    });
+  },
+
+  onTeacherNameInput(event) {
+    this.setData({
+      'teacherProfileForm.nickName': event.detail.value
+    });
+  },
+
+  onTeacherAvatarChoose(event) {
+    const avatarUrl = event.detail.avatarUrl;
+    if (!avatarUrl) return;
+
+    wx.saveFile({
+      tempFilePath: avatarUrl,
+      success: (res) => {
+        this.setData({
+          'teacherProfileForm.avatarUrl': res.savedFilePath
+        });
+      },
+      fail: () => {
+        this.setData({
+          'teacherProfileForm.avatarUrl': avatarUrl
+        });
+      }
+    });
+  },
+
+  saveTeacherProfile() {
+    const form = this.data.teacherProfileForm;
+    const teacherProfile = {
+      nickName: String(form.nickName || '').trim() || '老师',
+      avatarUrl: form.avatarUrl || ''
+    };
+
+    workspaceStore.saveTeacherProfile(teacherProfile);
+    this.setData({
+      teacherProfile,
+      teacherProfileModalVisible: false
+    });
+    wx.showToast({ title: '已保存', icon: 'success' });
+  },
+
   login() {
     wx.getUserProfile({
       desc: '用于显示教师身份并保存个人工作台',
@@ -256,6 +314,7 @@ const pageCore = {
     this.setData({
       cellModalVisible: false,
       periodModalVisible: false,
+      teacherProfileModalVisible: false,
       seatWizardVisible: false,
       seatModalVisible: false,
       dutyModalVisible: false,

@@ -1,7 +1,6 @@
 <view class="page-shell">
   <view class="topbar">
     <view class="top-main">
-      <view class="title">教师工作台</view>
       <view class="date-text">{{today}} · {{syncState}}</view>
     </view>
 
@@ -38,12 +37,12 @@
 
       <view wx:if="{{activeKey === 'dashboard'}}">
         <view class="welcome-panel">
-          <view class="welcome-avatar" bindtap="login">
-            <image wx:if="{{teacherProfile}}" src="{{teacherProfile.avatarUrl}}" mode="aspectFill"></image>
+          <view class="welcome-avatar" bindtap="openTeacherProfileModal">
+            <image wx:if="{{teacherProfile.avatarUrl}}" src="{{teacherProfile.avatarUrl}}" mode="aspectFill"></image>
             <text wx:else>师</text>
           </view>
-          <view class="welcome-copy">
-            <view class="welcome-title">早安，{{teacherProfile ? teacherProfile.nickName : '老师'}}</view>
+          <view class="welcome-copy" bindtap="openTeacherProfileModal">
+            <view class="welcome-title">早安，{{teacherProfile.nickName || '老师'}}</view>
             <view class="welcome-sub">今天也要把班级事务安排得清清楚楚</view>
           </view>
         </view>
@@ -248,6 +247,26 @@
         </view>
       </view>
     </scroll-view>
+  </view>
+</view>
+
+<view class="modal-mask" wx:if="{{teacherProfileModalVisible}}" bindtap="closeModal">
+  <view class="modal" catchtap="noop">
+    <view class="modal-title">教师资料</view>
+    <view class="profile-editor">
+      <button class="profile-avatar-button" open-type="chooseAvatar" bindchooseavatar="onTeacherAvatarChoose">
+        <image wx:if="{{teacherProfileForm.avatarUrl}}" src="{{teacherProfileForm.avatarUrl}}" mode="aspectFill"></image>
+        <text wx:else>师</text>
+      </button>
+      <view class="profile-edit-main">
+        <view class="field-label">显示名称</view>
+        <input class="field" type="nickname" placeholder="例如：李老师" value="{{teacherProfileForm.nickName}}" bindinput="onTeacherNameInput" />
+      </view>
+    </view>
+    <view class="modal-actions">
+      <button class="secondary" bindtap="closeModal">取消</button>
+      <button class="primary" bindtap="saveTeacherProfile">保存</button>
+    </view>
   </view>
 </view>
 
