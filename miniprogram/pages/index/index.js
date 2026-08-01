@@ -47,6 +47,54 @@ function buildSeatGridColumns(seats) {
   )).join(' ');
 }
 
+function normalizeSearchText(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function buildStudentSearchIndex(students) {
+  return students.flatMap((student) => {
+    const items = [];
+    const studentName = normalizeSearchText(student.name);
+    const guardianName = normalizeSearchText(student.guardianName);
+
+    if (studentName) {
+      items.push({
+        id: `${student.id}-student`,
+        studentId: student.id,
+        type: '学生',
+        keyword: studentName,
+        displayName: student.name,
+        studentName: student.name,
+        relationText: student.gender || '学生',
+        phone: student.phone || ''
+      });
+    }
+
+    if (guardianName) {
+      items.push({
+        id: `${student.id}-guardian`,
+        studentId: student.id,
+        type: '家长',
+        keyword: guardianName,
+        displayName: student.guardianName,
+        studentName: student.name,
+        relationText: student.guardianRelation || '家长',
+        phone: student.guardianPhone || ''
+      });
+    }
+
+    return items;
+  });
+}
+
+function searchStudentIndex(index, query, limit = 8) {
+  const keyword = normalizeSearchText(query);
+  if (!keyword) return [];
+  return index
+    .filter((item) => item.keyword.startsWith(keyword))
+    .slice(0, limit);
+}
+
 const navGroups = [
   {
     title: '班级管理',
@@ -81,6 +129,8 @@ function initialData() {
       avatarUrl: ''
     },
     summaryCards: [],
+    studentSearchQuery: '',
+    studentSearchResults: [],
     navGroups,
     activeKey: 'dashboard',
     activeTitle: '首页',
@@ -162,10 +212,13 @@ const pageCore = {
   },
 
   onHide() {
+    this.flushCloudSync();
     this.stopReminderTimer();
   },
 
   onUnload() {
+    this.flushCloudSync();
+    this.clearStudentSearchTimer();
     this.stopReminderTimer();
   },
 
@@ -177,7 +230,11 @@ const pageCore = {
       visibleTimetable: getVisibleTimetable(workspace.timetable),
       visibleDuties: this.buildDutyRows(workspace.duties),
       seatGridColumns: this.buildSeatGridColumns(workspace.seats)
-    }, () => this.refreshSummary());
+    }, () => {
+      this.refreshStudentSearchIndex(workspace.students);
+      this.runStudentSearch(this.data.studentSearchQuery, { immediate: true });
+      this.refreshSummary();
+    });
   },
 
   saveWorkspace(options = {}) {
@@ -190,11 +247,37 @@ const pageCore = {
     }
 
     if (this.data.cloudReady) {
-      this.syncWorkspace(payload);
+      this.scheduleCloudSync(payload);
     }
   },
 
+  scheduleCloudSync(payload) {
+    this._pendingSyncPayload = payload;
+    this.setData({ syncState: '等待同步 CloudBase' });
+
+    if (this._cloudSyncTimer) {
+      clearTimeout(this._cloudSyncTimer);
+    }
+
+    this._cloudSyncTimer = setTimeout(() => {
+      this._cloudSyncTimer = null;
+      const pendingPayload = this._pendingSyncPayload;
+      this._pendingSyncPayload = null;
+      this.syncWorkspace(pendingPayload);
+    }, 700);
+  },
+
+  flushCloudSync() {
+    if (!this._cloudSyncTimer || !this._pendingSyncPayload) return;
+    clearTimeout(this._cloudSyncTimer);
+    this._cloudSyncTimer = null;
+    const pendingPayload = this._pendingSyncPayload;
+    this._pendingSyncPayload = null;
+    this.syncWorkspace(pendingPayload);
+  },
+
   syncWorkspace(payload) {
+    if (!payload) return;
     workspaceStore.syncWorkspace(this.data.schoolYear, payload)
       .then(() => {
         this.setData({ syncState: '已同步 CloudBase' });
@@ -217,6 +300,61 @@ const pageCore = {
 
   buildSeatGridColumns(seats = this.data.seats) {
     return buildSeatGridColumns(seats);
+  },
+
+  refreshStudentSearchIndex(students = this.data.students) {
+    this._studentSearchIndex = buildStudentSearchIndex(students);
+  },
+
+  onStudentSearchInput(event) {
+    const query = event.detail.value;
+    this.setData({ studentSearchQuery: query });
+    this.runStudentSearch(query);
+  },
+
+  clearStudentSearch() {
+    this.clearStudentSearchTimer();
+
+    this.setData({
+      studentSearchQuery: '',
+      studentSearchResults: []
+    });
+  },
+
+  clearStudentSearchTimer() {
+    if (this._studentSearchTimer) {
+      clearTimeout(this._studentSearchTimer);
+      this._studentSearchTimer = null;
+    }
+  },
+
+  runStudentSearch(query, options = {}) {
+    const keyword = normalizeSearchText(query);
+    this._studentSearchSeq = (this._studentSearchSeq || 0) + 1;
+    const seq = this._studentSearchSeq;
+
+    this.clearStudentSearchTimer();
+
+    if (!keyword) {
+      this.setData({ studentSearchResults: [] });
+      return;
+    }
+
+    const applySearch = () => {
+      if (seq !== this._studentSearchSeq) return;
+      const results = searchStudentIndex(this._studentSearchIndex || [], keyword);
+      this.setData({ studentSearchResults: results });
+    };
+
+    if (options.immediate) {
+      applySearch();
+      return;
+    }
+
+    this._studentSearchTimer = setTimeout(() => {
+      this._studentSearchTimer = null;
+      applySearch();
+    }, 90);
   },
 
   loadTeacherProfile() {

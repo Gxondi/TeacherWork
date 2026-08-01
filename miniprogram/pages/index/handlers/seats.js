@@ -31,26 +31,32 @@ module.exports = {
   },
 
   toggleSeatSelection(id) {
-    const target = this.data.seats.find((seat) => seat.id === id);
+    const targetIndex = this.data.seats.findIndex((seat) => seat.id === id);
+    const target = this.data.seats[targetIndex];
     if (!target || target.deleted) return;
 
-    const selectedSeatIds = this.data.selectedSeatIds.includes(id)
+    const isSelected = this.data.selectedSeatIds.includes(id);
+    const selectedSeatIds = isSelected
       ? this.data.selectedSeatIds.filter((seatId) => seatId !== id)
       : [...this.data.selectedSeatIds, id];
 
-    const selected = new Set(selectedSeatIds);
-    const seats = this.data.seats.map((seat) => ({ ...seat, selected: selected.has(seat.id) }));
-    this.setData({ selectedSeatIds, seats });
+    this.setData({
+      selectedSeatIds,
+      [`seats[${targetIndex}].selected`]: !isSelected
+    });
   },
 
   onSeatGridTouchStart(event) {
     if (!this.data.batchSelecting) return;
+    this._seatRects = [];
+    this._lastTouchedSeatId = '';
+    this._touchSelectedIds = new Set();
     const seats = this.data.seats.map((seat) => ({
       ...seat,
       selected: this.data.batchPhase === 'target' && this.data.sourceSeatIds.includes(seat.id)
     }));
     this.setData({ selectedSeatIds: [], seats }, () => {
-      this.markSeatByTouch(event);
+      this.cacheSeatRects(() => this.markSeatByTouch(event));
     });
   },
 
@@ -80,35 +86,49 @@ module.exports = {
     this.confirmBatchReplace(this.data.sourceSeatIds, [...this.data.selectedSeatIds]);
   },
 
-  markSeatByTouch(event) {
-    const touch = event.touches && event.touches[0];
-    if (!touch) return;
-
+  cacheSeatRects(callback) {
     wx.createSelectorQuery()
       .in(this)
       .selectAll('.seat-card')
       .boundingClientRect((rects) => {
-        const hit = rects.find((rect) => (
-          touch.clientX >= rect.left &&
-          touch.clientX <= rect.right &&
-          touch.clientY >= rect.top &&
-          touch.clientY <= rect.bottom
-        ));
-
-        if (!hit) return;
-        const id = hit.dataset && hit.dataset.id ? hit.dataset.id : hit.id.replace('seat-card-', '');
-        const hitSeat = this.data.seats.find((seat) => seat.id === id);
-        if (id && hitSeat && !hitSeat.deleted && !this.data.selectedSeatIds.includes(id)) {
-          const selectedSeatIds = [...this.data.selectedSeatIds, id];
-          const selected = new Set([
-            ...(this.data.batchPhase === 'target' ? this.data.sourceSeatIds : []),
-            ...selectedSeatIds
-          ]);
-          const seats = this.data.seats.map((seat) => ({ ...seat, selected: selected.has(seat.id) }));
-          this.setData({ selectedSeatIds, seats });
-        }
+        this._seatRects = rects || [];
+        if (callback) callback();
       })
       .exec();
+  },
+
+  markSeatByTouch(event) {
+    const touch = event.touches && event.touches[0];
+    if (!touch) return;
+
+    if (!this._seatRects || !this._seatRects.length) {
+      this.cacheSeatRects(() => this.markSeatByTouch(event));
+      return;
+    }
+
+    const hit = this._seatRects.find((rect) => (
+      touch.clientX >= rect.left &&
+      touch.clientX <= rect.right &&
+      touch.clientY >= rect.top &&
+      touch.clientY <= rect.bottom
+    ));
+
+    if (!hit) return;
+    const id = hit.dataset && hit.dataset.id ? hit.dataset.id : hit.id.replace('seat-card-', '');
+    if (!id || id === this._lastTouchedSeatId || (this._touchSelectedIds && this._touchSelectedIds.has(id)) || this.data.selectedSeatIds.includes(id)) return;
+
+    const hitSeatIndex = this.data.seats.findIndex((seat) => seat.id === id);
+    const hitSeat = this.data.seats[hitSeatIndex];
+    if (!hitSeat || hitSeat.deleted) return;
+
+    this._lastTouchedSeatId = id;
+    if (this._touchSelectedIds) {
+      this._touchSelectedIds.add(id);
+    }
+    this.setData({
+      selectedSeatIds: [...this.data.selectedSeatIds, id],
+      [`seats[${hitSeatIndex}].selected`]: true
+    });
   },
 
   confirmBatchReplace(sourceSeatIds, targetSeatIds) {

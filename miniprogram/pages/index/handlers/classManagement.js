@@ -190,6 +190,8 @@ module.exports = {
       : [...this.data.students, item];
 
     this.setData({ students, studentModalVisible: false }, () => {
+      this.refreshStudentSearchIndex(students);
+      this.runStudentSearch(this.data.studentSearchQuery, { immediate: true });
       this.refreshSummary();
       this.saveWorkspace();
     });
@@ -199,6 +201,8 @@ module.exports = {
     const id = event.currentTarget.dataset.id;
     const students = this.data.students.filter((item) => item.id !== id);
     this.setData({ students }, () => {
+      this.refreshStudentSearchIndex(students);
+      this.runStudentSearch(this.data.studentSearchQuery, { immediate: true });
       this.refreshSummary();
       this.saveWorkspace();
     });
@@ -359,6 +363,8 @@ module.exports = {
       students,
       rosterImportVisible: false
     }, () => {
+      this.refreshStudentSearchIndex(students);
+      this.runStudentSearch(this.data.studentSearchQuery, { immediate: true });
       this.refreshSummary();
       this.saveWorkspace();
     });

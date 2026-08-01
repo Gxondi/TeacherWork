@@ -55,6 +55,26 @@
           </view>
         </view>
 
+        <view class="student-search">
+          <view class="search-box">
+            <text class="search-icon">⌕</text>
+            <input class="search-input" placeholder="搜索学生或家长姓名" value="{{studentSearchQuery}}" bindinput="onStudentSearchInput" />
+            <button wx:if="{{studentSearchQuery}}" class="search-clear" bindtap="clearStudentSearch">×</button>
+          </view>
+          <view class="search-results" wx:if="{{studentSearchQuery}}">
+            <block wx:if="{{studentSearchResults.length}}">
+              <view class="search-result-row" wx:for="{{studentSearchResults}}" wx:key="id" data-id="{{item.studentId}}" bindtap="openStudentModal">
+                <view class="search-result-main">
+                  <view class="search-name">{{item.displayName}}</view>
+                  <view class="search-meta">{{item.type}} · {{item.studentName}} · {{item.relationText}}</view>
+                </view>
+                <text class="phone-link {{item.phone ? '' : 'empty'}}" data-phone="{{item.phone}}" catchtap="callPhone">{{item.phone || '无电话'}}</text>
+              </view>
+            </block>
+            <view class="search-empty" wx:else>没有找到匹配姓名</view>
+          </view>
+        </view>
+
         <view class="module-heading">
           <view>
             <view class="module-title">本周课程表</view>
