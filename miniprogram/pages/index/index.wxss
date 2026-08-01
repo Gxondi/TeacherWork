@@ -83,7 +83,66 @@
   box-shadow: 0 10rpx 22rpx rgba(255, 111, 159, 0.2);
 }
 
+.class-scroll {
+  width: 100%;
+  margin-top: 12rpx;
+  white-space: nowrap;
+}
+
+.class-track {
+  display: inline-flex;
+  align-items: center;
+  gap: 10rpx;
+  padding-right: 22rpx;
+}
+
+.class-chip,
+.class-action {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 120rpx;
+  min-height: 46rpx;
+  padding: 0 18rpx;
+  border: 1rpx solid #ffd8e4;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.88);
+  color: #87586d;
+  font-size: 22rpx;
+  font-weight: 700;
+  line-height: 1;
+  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+
+.class-chip.active {
+  border-color: #ff6f9f;
+  background: #fff0f5;
+  color: #e84f82;
+  box-shadow: 0 8rpx 18rpx rgba(255, 111, 159, 0.16);
+}
+
+.class-action {
+  margin: 0;
+  min-width: 96rpx;
+  border-color: #ff8fb5;
+  background: #ff6f9f;
+  color: #ffffff;
+}
+
+.class-action.muted {
+  border-color: #ead7df;
+  background: #ffffff;
+  color: #9a6f80;
+}
+
+.class-action::after {
+  border: 0;
+}
+
 .year-chip:active,
+.class-chip:active,
+.class-action:active,
 .nav-item:active,
 .summary-card:active,
 .course-cell:active,

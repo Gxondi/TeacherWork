@@ -122,6 +122,9 @@ function initialData() {
     today: todayText(),
     years,
     schoolYear: years[0],
+    classes: [],
+    activeClassId: '',
+    activeClassName: '',
     cloudReady: false,
     syncState: '本地体验',
     teacherProfile: {
@@ -154,7 +157,9 @@ function initialData() {
     todoModalVisible: false,
     rosterImportVisible: false,
     teacherProfileModalVisible: false,
+    classModalVisible: false,
     editingId: '',
+    classForm: {},
     cellForm: {},
     periodForm: {},
     seatWizardForm: {
@@ -199,11 +204,10 @@ const pageCore = {
   data: initialData(),
 
   onLoad() {
-    this.setData({
+    this.loadSchoolYear(this.data.schoolYear, {
       cloudReady: !!app.globalData.cloudReady,
       syncState: app.globalData.cloudReady ? 'CloudBase 已启用' : '本地体验'
     });
-    this.loadWorkspace();
     this.loadTeacherProfile();
   },
 
@@ -222,8 +226,24 @@ const pageCore = {
     this.stopReminderTimer();
   },
 
+  loadSchoolYear(schoolYear, extraData = {}) {
+    const classes = workspaceStore.loadClasses(schoolYear);
+    const activeClassId = workspaceStore.loadActiveClassId(schoolYear, classes);
+    const activeClass = classes.find((item) => item.id === activeClassId) || classes[0];
+
+    this.setData({
+      ...extraData,
+      schoolYear,
+      classes,
+      activeClassId,
+      activeClassName: activeClass ? activeClass.name : workspaceStore.DEFAULT_CLASS_NAME,
+      studentSearchQuery: '',
+      studentSearchResults: []
+    }, () => this.loadWorkspace());
+  },
+
   loadWorkspace() {
-    const cached = workspaceStore.loadWorkspace(this.data.schoolYear);
+    const cached = workspaceStore.loadWorkspace(this.data.schoolYear, this.data.activeClassId);
     const workspace = normalizeWorkspace(cached || defaultWorkspace());
     this.setData({
       ...workspace,
@@ -240,7 +260,7 @@ const pageCore = {
   saveWorkspace(options = {}) {
     const payload = buildWorkspacePayload(this.data);
 
-    workspaceStore.saveWorkspace(this.data.schoolYear, payload);
+    workspaceStore.saveWorkspace(this.data.schoolYear, this.data.activeClassId, payload);
 
     if (!options.silent) {
       wx.showToast({ title: '已保存', icon: 'success' });
@@ -252,7 +272,12 @@ const pageCore = {
   },
 
   scheduleCloudSync(payload) {
-    this._pendingSyncPayload = payload;
+    this._pendingSyncPayload = {
+      schoolYear: this.data.schoolYear,
+      classId: this.data.activeClassId,
+      className: this.data.activeClassName,
+      payload
+    };
     this.setData({ syncState: '等待同步 CloudBase' });
 
     if (this._cloudSyncTimer) {
@@ -276,15 +301,30 @@ const pageCore = {
     this.syncWorkspace(pendingPayload);
   },
 
-  syncWorkspace(payload) {
-    if (!payload) return;
-    workspaceStore.syncWorkspace(this.data.schoolYear, payload)
+  syncWorkspace(syncTarget) {
+    if (!syncTarget || !syncTarget.payload) return;
+    workspaceStore.syncWorkspace(
+      syncTarget.schoolYear,
+      syncTarget.classId,
+      syncTarget.className,
+      syncTarget.payload
+    )
       .then(() => {
-        this.setData({ syncState: '已同步 CloudBase' });
+        if (
+          syncTarget.schoolYear === this.data.schoolYear &&
+          syncTarget.classId === this.data.activeClassId
+        ) {
+          this.setData({ syncState: '已同步 CloudBase' });
+        }
       })
       .catch((error) => {
         console.error('CloudBase syncWorkspace failed:', error);
-        this.setData({ syncState: 'CloudBase 同步失败，已保存在本地' });
+        if (
+          syncTarget.schoolYear === this.data.schoolYear &&
+          syncTarget.classId === this.data.activeClassId
+        ) {
+          this.setData({ syncState: 'CloudBase 同步失败，已保存在本地' });
+        }
       });
   },
 
@@ -434,10 +474,11 @@ const pageCore = {
 
   onYearChange(event) {
     const schoolYear = this.data.years[event.detail.value];
-    this.setData({
-      schoolYear,
+    if (!schoolYear) return;
+    this.flushCloudSync();
+    this.loadSchoolYear(schoolYear, {
       syncState: this.data.cloudReady ? 'CloudBase 已启用' : '本地体验'
-    }, () => this.loadWorkspace());
+    });
   },
 
   onYearTap(event) {
@@ -446,10 +487,121 @@ const pageCore = {
       return;
     }
 
+    this.flushCloudSync();
+    this.loadSchoolYear(schoolYear, {
+      syncState: this.data.cloudReady ? 'CloudBase 已启用' : '本地体验'
+    });
+  },
+
+  onClassTap(event) {
+    const classId = event.currentTarget.dataset.id;
+    if (!classId || classId === this.data.activeClassId) {
+      return;
+    }
+
+    const activeClass = this.data.classes.find((item) => item.id === classId);
+    if (!activeClass) return;
+
+    this.flushCloudSync();
+    workspaceStore.saveActiveClassId(this.data.schoolYear, classId);
     this.setData({
-      schoolYear,
+      activeClassId: classId,
+      activeClassName: activeClass.name,
+      studentSearchQuery: '',
+      studentSearchResults: [],
       syncState: this.data.cloudReady ? 'CloudBase 已启用' : '本地体验'
     }, () => this.loadWorkspace());
+  },
+
+  openClassModal(event) {
+    const classId = event.currentTarget.dataset.id || '';
+    const classItem = this.data.classes.find((item) => item.id === classId);
+
+    this.setData({
+      classModalVisible: true,
+      editingId: classItem ? classItem.id : '',
+      classForm: {
+        name: classItem ? classItem.name : ''
+      }
+    });
+  },
+
+  onClassNameInput(event) {
+    this.setData({
+      'classForm.name': event.detail.value
+    });
+  },
+
+  saveClass() {
+    const name = String(this.data.classForm.name || '').trim();
+    if (!name) {
+      wx.showToast({ title: '请填写班级名称', icon: 'none' });
+      return;
+    }
+
+    if (this.data.classes.some((item) => item.name === name && item.id !== this.data.editingId)) {
+      wx.showToast({ title: '班级名称已存在', icon: 'none' });
+      return;
+    }
+
+    const classId = this.data.editingId || `class-${Date.now()}`;
+    const exists = this.data.classes.some((item) => item.id === classId);
+    const classes = exists
+      ? this.data.classes.map((item) => (item.id === classId ? { ...item, name } : item))
+      : [...this.data.classes, { id: classId, name }];
+
+    workspaceStore.saveClasses(this.data.schoolYear, classes);
+    workspaceStore.saveActiveClassId(this.data.schoolYear, classId);
+    this.flushCloudSync();
+
+    this.setData({
+      classes,
+      activeClassId: classId,
+      activeClassName: name,
+      classModalVisible: false,
+      editingId: '',
+      classForm: {},
+      studentSearchQuery: '',
+      studentSearchResults: [],
+      syncState: this.data.cloudReady ? 'CloudBase 已启用' : '本地体验'
+    }, () => this.loadWorkspace());
+  },
+
+  deleteClass() {
+    const deletingClassId = this.data.editingId;
+    if (!deletingClassId) return;
+    if (this.data.classes.length <= 1) {
+      wx.showToast({ title: '至少保留一个班级', icon: 'none' });
+      return;
+    }
+
+    wx.showModal({
+      title: '删除班级',
+      content: '只会从当前学年的班级列表移除，不会清空本地历史数据。',
+      confirmText: '删除',
+      confirmColor: '#dc2626',
+      success: (res) => {
+        if (!res.confirm) return;
+
+        const classes = this.data.classes.filter((item) => item.id !== deletingClassId);
+        const activeClass = classes[0];
+        workspaceStore.saveClasses(this.data.schoolYear, classes);
+        workspaceStore.saveActiveClassId(this.data.schoolYear, activeClass.id);
+        this.flushCloudSync();
+
+        this.setData({
+          classes,
+          activeClassId: activeClass.id,
+          activeClassName: activeClass.name,
+          classModalVisible: false,
+          editingId: '',
+          classForm: {},
+          studentSearchQuery: '',
+          studentSearchResults: [],
+          syncState: this.data.cloudReady ? 'CloudBase 已启用' : '本地体验'
+        }, () => this.loadWorkspace());
+      }
+    });
   },
 
   onNavTap(event) {
@@ -513,6 +665,7 @@ const pageCore = {
       cellModalVisible: false,
       periodModalVisible: false,
       teacherProfileModalVisible: false,
+      classModalVisible: false,
       seatWizardVisible: false,
       seatModalVisible: false,
       dutyModalVisible: false,

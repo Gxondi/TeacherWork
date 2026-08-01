@@ -15,6 +15,20 @@
         >{{item}}</view>
       </view>
     </scroll-view>
+
+    <scroll-view class="class-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+      <view class="class-track">
+        <view
+          wx:for="{{classes}}"
+          wx:key="id"
+          class="class-chip {{activeClassId === item.id ? 'active' : ''}}"
+          data-id="{{item.id}}"
+          bindtap="onClassTap"
+        >{{item.name}}</view>
+        <button class="class-action" bindtap="openClassModal">+ 班级</button>
+        <button class="class-action muted" data-id="{{activeClassId}}" bindtap="openClassModal">编辑</button>
+      </view>
+    </scroll-view>
   </view>
 
   <view class="main-layout">
@@ -276,6 +290,19 @@
         </view>
       </view>
     </scroll-view>
+  </view>
+</view>
+
+<view class="modal-mask" wx:if="{{classModalVisible}}" bindtap="closeModal">
+  <view class="modal" catchtap="noop">
+    <view class="modal-title">{{editingId ? '编辑班级' : '新增班级'}}</view>
+    <view class="field-label">班级名称</view>
+    <input class="field" placeholder="例如：三年级1班" value="{{classForm.name}}" bindinput="onClassNameInput" />
+    <view class="modal-actions">
+      <button wx:if="{{editingId}}" class="text-danger" bindtap="deleteClass">删除</button>
+      <button class="secondary" bindtap="closeModal">取消</button>
+      <button class="primary" bindtap="saveClass">保存</button>
+    </view>
   </view>
 </view>
 
