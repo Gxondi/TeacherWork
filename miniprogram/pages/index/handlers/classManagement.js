@@ -148,8 +148,18 @@ module.exports = {
 
   deleteCommittee(event) {
     const id = event.currentTarget.dataset.id;
-    const committee = this.data.committee.filter((item) => item.id !== id);
-    this.setData({ committee }, () => this.saveWorkspace());
+    const role = this.data.committee.find((item) => item.id === id);
+    wx.showModal({
+      title: '删除班委',
+      content: `确定删除${role && role.role ? `「${role.role}」` : '这张班委卡片'}吗？`,
+      confirmText: '删除',
+      confirmColor: '#dc2626',
+      success: (res) => {
+        if (!res.confirm) return;
+        const committee = this.data.committee.filter((item) => item.id !== id);
+        this.setData({ committee }, () => this.saveWorkspace());
+      }
+    });
   },
 
   openStudentModal(event) {
@@ -192,6 +202,7 @@ module.exports = {
     this.setData({ students, studentModalVisible: false }, () => {
       this.refreshStudentSearchIndex(students);
       this.runStudentSearch(this.data.studentSearchQuery, { immediate: true });
+      this.refreshAttendanceView(students);
       this.refreshSummary();
       this.saveWorkspace();
     });
@@ -199,12 +210,23 @@ module.exports = {
 
   deleteStudent(event) {
     const id = event.currentTarget.dataset.id;
-    const students = this.data.students.filter((item) => item.id !== id);
-    this.setData({ students }, () => {
-      this.refreshStudentSearchIndex(students);
-      this.runStudentSearch(this.data.studentSearchQuery, { immediate: true });
-      this.refreshSummary();
-      this.saveWorkspace();
+    const student = this.data.students.find((item) => item.id === id);
+    wx.showModal({
+      title: '删除学生',
+      content: `确定从花名册删除${student && student.name ? `「${student.name}」` : '这名学生'}吗？家长信息也会一起移除。`,
+      confirmText: '删除',
+      confirmColor: '#dc2626',
+      success: (res) => {
+        if (!res.confirm) return;
+        const students = this.data.students.filter((item) => item.id !== id);
+        this.setData({ students }, () => {
+          this.refreshStudentSearchIndex(students);
+          this.runStudentSearch(this.data.studentSearchQuery, { immediate: true });
+          this.refreshAttendanceView(students);
+          this.refreshSummary();
+          this.saveWorkspace();
+        });
+      }
     });
   },
 
@@ -358,15 +380,24 @@ module.exports = {
       return;
     }
 
-    const students = [...this.data.students, ...previewStudents];
-    this.setData({
-      students,
-      rosterImportVisible: false
-    }, () => {
-      this.refreshStudentSearchIndex(students);
-      this.runStudentSearch(this.data.studentSearchQuery, { immediate: true });
-      this.refreshSummary();
-      this.saveWorkspace();
+    wx.showModal({
+      title: '确认导入',
+      content: `将追加导入 ${previewStudents.length} 名学生到当前班级花名册，原有学生不会被覆盖。确定继续吗？`,
+      confirmText: '导入',
+      success: (res) => {
+        if (!res.confirm) return;
+        const students = [...this.data.students, ...previewStudents];
+        this.setData({
+          students,
+          rosterImportVisible: false
+        }, () => {
+          this.refreshStudentSearchIndex(students);
+          this.runStudentSearch(this.data.studentSearchQuery, { immediate: true });
+          this.refreshAttendanceView(students);
+          this.refreshSummary();
+          this.saveWorkspace();
+        });
+      }
     });
   }
 };

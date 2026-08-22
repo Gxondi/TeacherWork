@@ -13,12 +13,21 @@ const {
   normalizeWorkspace
 } = require('../../models/workspace');
 const workspaceStore = require('../../services/workspaceStore');
+const auth = require('../../services/auth');
 
 const timetableHandlers = require('./handlers/timetable');
 const seatHandlers = require('./handlers/seats');
+const attendanceHandlers = require('./handlers/attendance');
 const classManagementHandlers = require('./handlers/classManagement');
 const homeSchoolHandlers = require('./handlers/homeSchool');
 const { IMPORT_FIELDS, defaultMapping } = require('../../utils/importRoster');
+
+const ATTENDANCE_STATUSES = [
+  { key: 'present', label: '已到', text: '已到' },
+  { key: 'late', label: '迟到', text: '迟到' },
+  { key: 'leave', label: '请假', text: '请假' },
+  { key: 'absent', label: '缺勤', text: '缺勤' }
+];
 
 function buildImportFields() {
   const mapping = defaultMapping();
@@ -26,6 +35,11 @@ function buildImportFields() {
     ...field,
     value: mapping[field.key] || ''
   }));
+}
+
+function syncStateText(cloudReady, ownerOpenid) {
+  if (!cloudReady) return '本地体验';
+  return ownerOpenid ? 'CloudBase 已启用' : '未登录，本地保存';
 }
 
 function buildDutyRows(duties, dutyDays) {
@@ -45,6 +59,58 @@ function buildSeatGridColumns(seats) {
   return Array.from({ length: maxColumn }, (_, index) => (
     occupiedColumns.has(index + 1) ? '90rpx' : '30rpx'
   )).join(' ');
+}
+
+function todayDateValue(date = new Date()) {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+function findAttendanceRecord(records, date, studentId) {
+  return records.find((record) => record.date === date && record.studentId === studentId);
+}
+
+function attendanceStatusText(status) {
+  const item = ATTENDANCE_STATUSES.find((statusItem) => statusItem.key === status);
+  return item ? item.text : '未确认';
+}
+
+function buildAttendanceRows(students, records, date) {
+  return students.map((student) => {
+    const record = findAttendanceRecord(records, date, student.id);
+    const status = record ? record.status : 'pending';
+    return {
+      id: `${date}-${student.id}`,
+      date,
+      studentId: student.id,
+      studentNo: student.studentNo || '',
+      studentName: student.name || '未命名学生',
+      gender: student.gender || '',
+      guardianName: student.guardianName || '',
+      guardianPhone: student.guardianPhone || '',
+      status,
+      statusText: attendanceStatusText(status),
+      note: record ? record.note : '',
+      presentActive: status === 'present',
+      lateActive: status === 'late',
+      leaveActive: status === 'leave',
+      absentActive: status === 'absent'
+    };
+  });
+}
+
+function buildAttendanceSummary(rows) {
+  const total = rows.length;
+  const count = (status) => rows.filter((row) => row.status === status).length;
+  return [
+    { label: '应到', value: `${total}`, className: 'total' },
+    { label: '已到', value: `${count('present')}`, className: 'present' },
+    { label: '迟到', value: `${count('late')}`, className: 'late' },
+    { label: '请假', value: `${count('leave')}`, className: 'leave' },
+    { label: '缺勤', value: `${count('absent')}`, className: 'absent' },
+    { label: '未确认', value: `${count('pending')}`, className: 'pending' }
+  ];
 }
 
 function normalizeSearchText(value) {
@@ -101,6 +167,7 @@ const navGroups = [
     items: [
       { key: 'dashboard', label: '首页', icon: '🏠' },
       { key: 'seats', label: '座位表', icon: '💺' },
+      { key: 'attendance', label: '考勤', icon: '📝' },
       { key: 'duties', label: '值日表', icon: '🧹' },
       { key: 'committee', label: '班委名单', icon: '👑' },
       { key: 'roster', label: '花名册', icon: '📋' }
@@ -125,6 +192,9 @@ function initialData() {
     classes: [],
     activeClassId: '',
     activeClassName: '',
+    ownerOpenid: '',
+    isLoggedIn: false,
+    loginState: '未登录',
     cloudReady: false,
     syncState: '本地体验',
     teacherProfile: {
@@ -139,6 +209,7 @@ function initialData() {
     activeTitle: '首页',
     colors: COLORS,
     periodLabels: PERIODS,
+    attendanceStatuses: ATTENDANCE_STATUSES,
     dutyDays: WORKDAYS,
     selectedSeatIds: [],
     sourceSeatIds: [],
@@ -192,6 +263,10 @@ function initialData() {
     visibleTimetable: [],
     periodTimes: [],
     seats: [],
+    attendanceDate: todayDateValue(),
+    attendanceRecords: [],
+    attendanceSummary: [],
+    visibleAttendance: [],
     duties: [],
     visibleDuties: [],
     committee: [],
@@ -204,9 +279,14 @@ const pageCore = {
   data: initialData(),
 
   onLoad() {
+    const session = auth.loadSession();
+    const ownerOpenid = session && session.openid ? session.openid : '';
     this.loadSchoolYear(this.data.schoolYear, {
+      ownerOpenid,
+      isLoggedIn: !!ownerOpenid,
+      loginState: ownerOpenid ? '已登录' : '未登录',
       cloudReady: !!app.globalData.cloudReady,
-      syncState: app.globalData.cloudReady ? 'CloudBase 已启用' : '本地体验'
+      syncState: syncStateText(!!app.globalData.cloudReady, ownerOpenid)
     });
     this.loadTeacherProfile();
   },
@@ -227,8 +307,11 @@ const pageCore = {
   },
 
   loadSchoolYear(schoolYear, extraData = {}) {
-    const classes = workspaceStore.loadClasses(schoolYear);
-    const activeClassId = workspaceStore.loadActiveClassId(schoolYear, classes);
+    const ownerOpenid = Object.prototype.hasOwnProperty.call(extraData, 'ownerOpenid')
+      ? extraData.ownerOpenid
+      : this.data.ownerOpenid;
+    const classes = workspaceStore.loadClasses(ownerOpenid, schoolYear);
+    const activeClassId = workspaceStore.loadActiveClassId(ownerOpenid, schoolYear, classes);
     const activeClass = classes.find((item) => item.id === activeClassId) || classes[0];
 
     this.setData({
@@ -243,30 +326,39 @@ const pageCore = {
   },
 
   loadWorkspace() {
-    const cached = workspaceStore.loadWorkspace(this.data.schoolYear, this.data.activeClassId);
+    const cached = workspaceStore.loadWorkspace(
+      this.data.ownerOpenid,
+      this.data.schoolYear,
+      this.data.activeClassId
+    );
     const workspace = normalizeWorkspace(cached || defaultWorkspace());
     this.setData({
       ...workspace,
       visibleTimetable: getVisibleTimetable(workspace.timetable),
       visibleDuties: this.buildDutyRows(workspace.duties),
-      seatGridColumns: this.buildSeatGridColumns(workspace.seats)
+      seatGridColumns: this.buildSeatGridColumns(workspace.seats),
+      ...this.buildAttendanceView(workspace.students, workspace.attendanceRecords, workspace.attendanceDate)
     }, () => {
       this.refreshStudentSearchIndex(workspace.students);
       this.runStudentSearch(this.data.studentSearchQuery, { immediate: true });
       this.refreshSummary();
+      if (this._syncAfterLogin) {
+        this._syncAfterLogin = false;
+        this.saveWorkspace({ silent: true });
+      }
     });
   },
 
   saveWorkspace(options = {}) {
     const payload = buildWorkspacePayload(this.data);
 
-    workspaceStore.saveWorkspace(this.data.schoolYear, this.data.activeClassId, payload);
+    workspaceStore.saveWorkspace(this.data.ownerOpenid, this.data.schoolYear, this.data.activeClassId, payload);
 
     if (!options.silent) {
       wx.showToast({ title: '已保存', icon: 'success' });
     }
 
-    if (this.data.cloudReady) {
+    if (this.data.cloudReady && this.data.ownerOpenid) {
       this.scheduleCloudSync(payload);
     }
   },
@@ -276,6 +368,7 @@ const pageCore = {
       schoolYear: this.data.schoolYear,
       classId: this.data.activeClassId,
       className: this.data.activeClassName,
+      ownerOpenid: this.data.ownerOpenid,
       payload
     };
     this.setData({ syncState: '等待同步 CloudBase' });
@@ -304,6 +397,7 @@ const pageCore = {
   syncWorkspace(syncTarget) {
     if (!syncTarget || !syncTarget.payload) return;
     workspaceStore.syncWorkspace(
+      syncTarget.ownerOpenid,
       syncTarget.schoolYear,
       syncTarget.classId,
       syncTarget.className,
@@ -312,7 +406,8 @@ const pageCore = {
       .then(() => {
         if (
           syncTarget.schoolYear === this.data.schoolYear &&
-          syncTarget.classId === this.data.activeClassId
+          syncTarget.classId === this.data.activeClassId &&
+          syncTarget.ownerOpenid === this.data.ownerOpenid
         ) {
           this.setData({ syncState: '已同步 CloudBase' });
         }
@@ -321,7 +416,8 @@ const pageCore = {
         console.error('CloudBase syncWorkspace failed:', error);
         if (
           syncTarget.schoolYear === this.data.schoolYear &&
-          syncTarget.classId === this.data.activeClassId
+          syncTarget.classId === this.data.activeClassId &&
+          syncTarget.ownerOpenid === this.data.ownerOpenid
         ) {
           this.setData({ syncState: 'CloudBase 同步失败，已保存在本地' });
         }
@@ -340,6 +436,26 @@ const pageCore = {
 
   buildSeatGridColumns(seats = this.data.seats) {
     return buildSeatGridColumns(seats);
+  },
+
+  buildAttendanceView(
+    students = this.data.students,
+    attendanceRecords = this.data.attendanceRecords,
+    attendanceDate = this.data.attendanceDate
+  ) {
+    const visibleAttendance = buildAttendanceRows(students, attendanceRecords, attendanceDate);
+    return {
+      visibleAttendance,
+      attendanceSummary: buildAttendanceSummary(visibleAttendance)
+    };
+  },
+
+  refreshAttendanceView(
+    students = this.data.students,
+    attendanceRecords = this.data.attendanceRecords,
+    attendanceDate = this.data.attendanceDate
+  ) {
+    this.setData(this.buildAttendanceView(students, attendanceRecords, attendanceDate));
   },
 
   refreshStudentSearchIndex(students = this.data.students) {
@@ -398,10 +514,20 @@ const pageCore = {
   },
 
   loadTeacherProfile() {
-    const teacherProfile = workspaceStore.loadTeacherProfile();
+    const teacherProfile = workspaceStore.loadTeacherProfile(this.data.ownerOpenid);
     if (teacherProfile) {
       this.setData({ teacherProfile });
     }
+    return teacherProfile || null;
+  },
+
+  onTeacherAvatarTap() {
+    if (!this.data.isLoggedIn) {
+      this.login();
+      return;
+    }
+
+    this.openTeacherProfileModal();
   },
 
   openTeacherProfileModal() {
@@ -446,7 +572,7 @@ const pageCore = {
       avatarUrl: form.avatarUrl || ''
     };
 
-    workspaceStore.saveTeacherProfile(teacherProfile);
+    workspaceStore.saveTeacherProfile(this.data.ownerOpenid, teacherProfile);
     this.setData({
       teacherProfile,
       teacherProfileModalVisible: false
@@ -455,21 +581,43 @@ const pageCore = {
   },
 
   login() {
-    wx.getUserProfile({
-      desc: '用于显示教师身份并保存个人工作台',
-      success: (res) => {
-        const teacherProfile = {
-          nickName: res.userInfo.nickName,
-          avatarUrl: res.userInfo.avatarUrl
-        };
-        workspaceStore.saveTeacherProfile(teacherProfile);
-        this.setData({ teacherProfile });
+    if (!this.data.cloudReady) {
+      wx.showToast({ title: '请先启用 CloudBase', icon: 'none' });
+      return;
+    }
+
+    wx.showLoading({ title: '登录中' });
+    auth.login()
+      .then((session) => {
+        wx.hideLoading();
+        app.globalData.openid = session.openid;
+        app.globalData.loggedIn = true;
+        this.flushCloudSync();
+        this._syncAfterLogin = true;
+        this.setData({
+          ownerOpenid: session.openid,
+          isLoggedIn: true,
+          loginState: '已登录',
+          syncState: syncStateText(this.data.cloudReady, session.openid)
+        }, () => {
+          const teacherProfile = this.loadTeacherProfile();
+          this.loadSchoolYear(this.data.schoolYear, {
+            ownerOpenid: session.openid,
+            isLoggedIn: true,
+            loginState: '已登录',
+            syncState: syncStateText(this.data.cloudReady, session.openid)
+          });
+          if (!teacherProfile || (!teacherProfile.nickName && !teacherProfile.avatarUrl)) {
+            this.openTeacherProfileModal();
+          }
+        });
         wx.showToast({ title: '登录成功', icon: 'success' });
-      },
-      fail: () => {
-        wx.showToast({ title: '已取消登录', icon: 'none' });
-      }
-    });
+      })
+      .catch((error) => {
+        wx.hideLoading();
+        console.error('login failed:', error);
+        wx.showToast({ title: '登录失败，请检查云函数', icon: 'none' });
+      });
   },
 
   onYearChange(event) {
@@ -477,7 +625,7 @@ const pageCore = {
     if (!schoolYear) return;
     this.flushCloudSync();
     this.loadSchoolYear(schoolYear, {
-      syncState: this.data.cloudReady ? 'CloudBase 已启用' : '本地体验'
+      syncState: syncStateText(this.data.cloudReady, this.data.ownerOpenid)
     });
   },
 
@@ -489,7 +637,7 @@ const pageCore = {
 
     this.flushCloudSync();
     this.loadSchoolYear(schoolYear, {
-      syncState: this.data.cloudReady ? 'CloudBase 已启用' : '本地体验'
+      syncState: syncStateText(this.data.cloudReady, this.data.ownerOpenid)
     });
   },
 
@@ -503,13 +651,13 @@ const pageCore = {
     if (!activeClass) return;
 
     this.flushCloudSync();
-    workspaceStore.saveActiveClassId(this.data.schoolYear, classId);
+    workspaceStore.saveActiveClassId(this.data.ownerOpenid, this.data.schoolYear, classId);
     this.setData({
       activeClassId: classId,
       activeClassName: activeClass.name,
       studentSearchQuery: '',
       studentSearchResults: [],
-      syncState: this.data.cloudReady ? 'CloudBase 已启用' : '本地体验'
+      syncState: syncStateText(this.data.cloudReady, this.data.ownerOpenid)
     }, () => this.loadWorkspace());
   },
 
@@ -550,8 +698,8 @@ const pageCore = {
       ? this.data.classes.map((item) => (item.id === classId ? { ...item, name } : item))
       : [...this.data.classes, { id: classId, name }];
 
-    workspaceStore.saveClasses(this.data.schoolYear, classes);
-    workspaceStore.saveActiveClassId(this.data.schoolYear, classId);
+    workspaceStore.saveClasses(this.data.ownerOpenid, this.data.schoolYear, classes);
+    workspaceStore.saveActiveClassId(this.data.ownerOpenid, this.data.schoolYear, classId);
     this.flushCloudSync();
 
     this.setData({
@@ -563,7 +711,7 @@ const pageCore = {
       classForm: {},
       studentSearchQuery: '',
       studentSearchResults: [],
-      syncState: this.data.cloudReady ? 'CloudBase 已启用' : '本地体验'
+      syncState: syncStateText(this.data.cloudReady, this.data.ownerOpenid)
     }, () => this.loadWorkspace());
   },
 
@@ -585,8 +733,8 @@ const pageCore = {
 
         const classes = this.data.classes.filter((item) => item.id !== deletingClassId);
         const activeClass = classes[0];
-        workspaceStore.saveClasses(this.data.schoolYear, classes);
-        workspaceStore.saveActiveClassId(this.data.schoolYear, activeClass.id);
+        workspaceStore.saveClasses(this.data.ownerOpenid, this.data.schoolYear, classes);
+        workspaceStore.saveActiveClassId(this.data.ownerOpenid, this.data.schoolYear, activeClass.id);
         this.flushCloudSync();
 
         this.setData({
@@ -598,7 +746,7 @@ const pageCore = {
           classForm: {},
           studentSearchQuery: '',
           studentSearchResults: [],
-          syncState: this.data.cloudReady ? 'CloudBase 已启用' : '本地体验'
+          syncState: syncStateText(this.data.cloudReady, this.data.ownerOpenid)
         }, () => this.loadWorkspace());
       }
     });
@@ -616,6 +764,8 @@ const pageCore = {
     }, () => {
       if (key === 'seats') {
         this.updateSeatStageWidth();
+      } else if (key === 'attendance') {
+        this.refreshAttendanceView();
       }
     });
   },
@@ -685,6 +835,7 @@ Page(Object.assign(
   pageCore,
   timetableHandlers,
   seatHandlers,
+  attendanceHandlers,
   classManagementHandlers,
   homeSchoolHandlers
 ));

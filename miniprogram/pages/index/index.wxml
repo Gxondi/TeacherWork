@@ -51,13 +51,13 @@
 
       <view wx:if="{{activeKey === 'dashboard'}}">
         <view class="welcome-panel">
-          <view class="welcome-avatar" bindtap="openTeacherProfileModal">
+          <view class="welcome-avatar" bindtap="onTeacherAvatarTap">
             <image wx:if="{{teacherProfile.avatarUrl}}" src="{{teacherProfile.avatarUrl}}" mode="aspectFill"></image>
-            <text wx:else>师</text>
+            <text wx:else>{{isLoggedIn ? '师' : '登'}}</text>
           </view>
-          <view class="welcome-copy" bindtap="openTeacherProfileModal">
+          <view class="welcome-copy" bindtap="onTeacherAvatarTap">
             <view class="welcome-title">早安，{{teacherProfile.nickName || '老师'}}</view>
-            <view class="welcome-sub">今天也要把班级事务安排得清清楚楚</view>
+            <view class="welcome-sub">{{isLoggedIn ? '今天也要把班级事务安排得清清楚楚' : '未登录，本地体验数据不会同步到个人云端'}}</view>
           </view>
         </view>
 
@@ -154,6 +154,66 @@
             </view>
           </view>
         </scroll-view>
+      </view>
+
+      <view wx:elif="{{activeKey === 'attendance'}}">
+        <view class="attendance-toolbar">
+          <picker mode="date" value="{{attendanceDate}}" bindchange="onAttendanceDateChange">
+            <view class="attendance-date">{{attendanceDate}}</view>
+          </picker>
+          <button class="secondary" bindtap="syncAttendanceRoster">同步花名册</button>
+          <button class="primary" bindtap="markAllPresent">全员到齐</button>
+        </view>
+
+        <view class="attendance-summary">
+          <view class="attendance-summary-card {{item.className}}" wx:for="{{attendanceSummary}}" wx:key="label">
+            <view class="attendance-summary-value">{{item.value}}</view>
+            <view class="attendance-summary-label">{{item.label}}</view>
+          </view>
+        </view>
+
+        <view class="attendance-empty" wx:if="{{!visibleAttendance.length}}">
+          还没有学生，先去花名册添加或导入学生
+        </view>
+        <view class="attendance-list" wx:else>
+          <view class="attendance-row" wx:for="{{visibleAttendance}}" wx:key="id">
+            <view class="attendance-card-head">
+              <view class="attendance-student">
+                <view class="attendance-name">{{item.studentName}}</view>
+                <view class="attendance-meta">
+                  {{item.studentNo || '无学号'}} · {{item.gender || '未填性别'}}
+                </view>
+              </view>
+              <view class="attendance-status {{item.status}}">{{item.statusText}}</view>
+            </view>
+            <view class="attendance-actions">
+              <button
+                class="attendance-status-button {{item.presentActive ? 'active' : ''}} present"
+                data-student-id="{{item.studentId}}"
+                data-status="present"
+                catchtap="onAttendanceStatusTap"
+              >已到</button>
+              <button
+                class="attendance-status-button {{item.lateActive ? 'active' : ''}} late"
+                data-student-id="{{item.studentId}}"
+                data-status="late"
+                catchtap="onAttendanceStatusTap"
+              >迟到</button>
+              <button
+                class="attendance-status-button {{item.leaveActive ? 'active' : ''}} leave"
+                data-student-id="{{item.studentId}}"
+                data-status="leave"
+                catchtap="onAttendanceStatusTap"
+              >请假</button>
+              <button
+                class="attendance-status-button {{item.absentActive ? 'active' : ''}} absent"
+                data-student-id="{{item.studentId}}"
+                data-status="absent"
+                catchtap="onAttendanceStatusTap"
+              >缺勤</button>
+            </view>
+          </view>
+        </view>
       </view>
 
       <view wx:elif="{{activeKey === 'duties'}}">

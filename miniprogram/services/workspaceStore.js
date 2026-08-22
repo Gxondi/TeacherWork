@@ -1,20 +1,41 @@
 const DEFAULT_CLASS_ID = 'class-default';
 const DEFAULT_CLASS_NAME = '默认班级';
+const GUEST_OWNER_ID = 'guest';
+
+function ownerId(openid) {
+  return openid || GUEST_OWNER_ID;
+}
 
 function legacyStorageKey(schoolYear) {
   return `teacher-workbench:${schoolYear}`;
 }
 
-function storageKey(schoolYear, classId = DEFAULT_CLASS_ID) {
+function storageKey(openid, schoolYear, classId = DEFAULT_CLASS_ID) {
+  return `teacher-workbench:${ownerId(openid)}:${schoolYear}:${classId}`;
+}
+
+function legacyClassStorageKey(schoolYear, classId = DEFAULT_CLASS_ID) {
   return `teacher-workbench:${schoolYear}:${classId}`;
 }
 
-function classListKey(schoolYear) {
+function classListKey(openid, schoolYear) {
+  return `teacher-workbench-classes:${ownerId(openid)}:${schoolYear}`;
+}
+
+function legacyClassListKey(schoolYear) {
   return `teacher-workbench-classes:${schoolYear}`;
 }
 
-function activeClassKey(schoolYear) {
+function activeClassKey(openid, schoolYear) {
+  return `teacher-workbench-active-class:${ownerId(openid)}:${schoolYear}`;
+}
+
+function legacyActiveClassKey(schoolYear) {
   return `teacher-workbench-active-class:${schoolYear}`;
+}
+
+function teacherProfileKey(openid) {
+  return `teacher-profile:${ownerId(openid)}`;
 }
 
 function defaultClasses() {
@@ -34,55 +55,68 @@ function normalizeClasses(classes) {
     }));
 }
 
-function loadClasses(schoolYear) {
-  const classes = normalizeClasses(wx.getStorageSync(classListKey(schoolYear)));
+function loadClasses(openid, schoolYear) {
+  const classes = normalizeClasses(
+    wx.getStorageSync(classListKey(openid, schoolYear)) ||
+    wx.getStorageSync(legacyClassListKey(schoolYear))
+  );
   if (!classes.length) return defaultClasses();
   return classes;
 }
 
-function saveClasses(schoolYear, classes) {
-  wx.setStorageSync(classListKey(schoolYear), normalizeClasses(classes));
+function saveClasses(openid, schoolYear, classes) {
+  wx.setStorageSync(classListKey(openid, schoolYear), normalizeClasses(classes));
 }
 
-function loadActiveClassId(schoolYear, classes = loadClasses(schoolYear)) {
-  const cached = wx.getStorageSync(activeClassKey(schoolYear));
+function loadActiveClassId(openid, schoolYear, classes = loadClasses(openid, schoolYear)) {
+  const cached = wx.getStorageSync(activeClassKey(openid, schoolYear)) ||
+    wx.getStorageSync(legacyActiveClassKey(schoolYear));
   return classes.some((item) => item.id === cached) ? cached : classes[0].id;
 }
 
-function saveActiveClassId(schoolYear, classId) {
-  wx.setStorageSync(activeClassKey(schoolYear), classId);
+function saveActiveClassId(openid, schoolYear, classId) {
+  wx.setStorageSync(activeClassKey(openid, schoolYear), classId);
 }
 
-function loadWorkspace(schoolYear, classId = DEFAULT_CLASS_ID) {
-  const workspace = wx.getStorageSync(storageKey(schoolYear, classId));
+function loadWorkspace(openid, schoolYear, classId = DEFAULT_CLASS_ID) {
+  const workspace = wx.getStorageSync(storageKey(openid, schoolYear, classId));
   if (workspace) return workspace;
+
+  const legacyClassWorkspace = wx.getStorageSync(legacyClassStorageKey(schoolYear, classId));
+  if (legacyClassWorkspace) return legacyClassWorkspace;
+
   if (classId === DEFAULT_CLASS_ID) {
     return wx.getStorageSync(legacyStorageKey(schoolYear));
   }
   return null;
 }
 
-function saveWorkspace(schoolYear, classId, payload) {
-  wx.setStorageSync(storageKey(schoolYear, classId), payload);
+function saveWorkspace(openid, schoolYear, classId, payload) {
+  wx.setStorageSync(storageKey(openid, schoolYear, classId), payload);
 }
 
-function loadTeacherProfile() {
-  return wx.getStorageSync('teacher-profile');
+function loadTeacherProfile(openid) {
+  return wx.getStorageSync(teacherProfileKey(openid)) || wx.getStorageSync('teacher-profile');
 }
 
-function saveTeacherProfile(profile) {
-  wx.setStorageSync('teacher-profile', profile);
+function saveTeacherProfile(openid, profile) {
+  wx.setStorageSync(teacherProfileKey(openid), profile);
 }
 
-function syncWorkspace(schoolYear, classId, className, payload) {
+function syncWorkspace(openid, schoolYear, classId, className, payload) {
+  if (!openid) {
+    return Promise.reject(new Error('missing openid'));
+  }
+
   const db = wx.cloud.database();
   const collection = db.collection('teacher_workspaces');
 
-  return collection.where({ schoolYear, classId }).get()
+  return collection.where({ ownerOpenid: openid, schoolYear, classId }).get()
     .then((res) => {
       if (res.data && res.data.length) {
         return collection.doc(res.data[0]._id).update({
           data: {
+            ownerOpenid: openid,
             className,
             payload,
             updatedAt: db.serverDate()
@@ -92,6 +126,7 @@ function syncWorkspace(schoolYear, classId, className, payload) {
 
       return collection.add({
         data: {
+          ownerOpenid: openid,
           schoolYear,
           classId,
           className,

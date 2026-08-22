@@ -7,8 +7,11 @@
 字段：
 
 - `schoolYear`: 学年，例如 `2026-2027`
+- `classId`: 班级 ID
+- `className`: 班级名称
+- `ownerOpenid`: 当前教师 openid，用于查询时显式隔离
 - `payload`: 工作台数据，包含课程表、座位、值日、班委、花名册、待办
-- `_openid`: CloudBase 自动写入，用于隔离不同教师的数据
+- `_openid`: CloudBase 自动写入，用于数据库权限隔离
 - `createdAt`: 创建时间
 - `updatedAt`: 更新时间
 

@@ -19,6 +19,26 @@ function makeDuties() {
   }));
 }
 
+function todayDateValue(date = new Date()) {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+function normalizeAttendanceRecords(records) {
+  if (!Array.isArray(records)) return [];
+  return records
+    .filter((item) => item && item.date && item.studentId)
+    .map((item) => ({
+      id: item.id || `attendance-${item.date}-${item.studentId}`,
+      date: item.date,
+      studentId: item.studentId,
+      studentName: item.studentName || '',
+      status: item.status || 'pending',
+      note: item.note || ''
+    }));
+}
+
 function normalizeDutyStudents(students = {}) {
   return WORKDAYS.reduce((result, day) => ({
     ...result,
@@ -60,6 +80,8 @@ function defaultWorkspace() {
     periodTimes: DEFAULT_PERIOD_TIMES.map((item) => ({ ...item })),
     seats: makeSeats(),
     duties: makeDuties(),
+    attendanceDate: todayDateValue(),
+    attendanceRecords: [],
     committee: [
       { id: 'role-1', role: '班长', studentName: '', responsibility: '班级日常协调' },
       { id: 'role-2', role: '学习委员', studentName: '', responsibility: '作业与学习反馈' }
@@ -97,6 +119,8 @@ function normalizeWorkspace(workspace) {
   normalized.periodTimes = normalizePeriodTimes(normalized.periodTimes);
   normalized.seats = normalizeSeatLayout(normalized.seats);
   normalized.duties = normalizeDuties(normalized.duties);
+  normalized.attendanceDate = normalized.attendanceDate || todayDateValue();
+  normalized.attendanceRecords = normalizeAttendanceRecords(normalized.attendanceRecords);
   return normalized;
 }
 
@@ -109,6 +133,8 @@ function buildWorkspacePayload(data) {
     periodTimes: data.periodTimes,
     seats: data.seats.map((seat) => ({ ...seat, selected: false })),
     duties: data.duties,
+    attendanceDate: data.attendanceDate,
+    attendanceRecords: normalizeAttendanceRecords(data.attendanceRecords),
     committee: data.committee,
     students: data.students,
     todos: data.todos

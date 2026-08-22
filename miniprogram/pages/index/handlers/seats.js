@@ -216,6 +216,24 @@ module.exports = {
   },
 
   addSeat() {
+    if (this.data.seats.length) {
+      wx.showModal({
+        title: '重新生成座位表',
+        content: '继续生成会在完成向导后覆盖当前座位布局和座位信息。',
+        confirmText: '继续',
+        confirmColor: '#dc2626',
+        success: (res) => {
+          if (!res.confirm) return;
+          this.openSeatWizard();
+        }
+      });
+      return;
+    }
+
+    this.openSeatWizard();
+  },
+
+  openSeatWizard() {
     this.setData({
       seatWizardVisible: true,
       seatWizardForm: {
@@ -307,28 +325,52 @@ module.exports = {
   },
 
   deleteSeat() {
-    const seats = this.data.seats.map((seat) => (
-      seat.id === this.data.editingId
-        ? { ...seat, studentName: '', note: '', deleted: true, selected: false }
-        : seat
-    ));
-    this.setData({ seats, seatModalVisible: false }, () => this.saveWorkspace());
+    wx.showModal({
+      title: '删除座位',
+      content: '确定删除这个座位吗？座位位置会保留为空洞，学生姓名和备注会清空。',
+      confirmText: '删除',
+      confirmColor: '#dc2626',
+      success: (res) => {
+        if (!res.confirm) return;
+        const seats = this.data.seats.map((seat) => (
+          seat.id === this.data.editingId
+            ? { ...seat, studentName: '', note: '', deleted: true, selected: false }
+            : seat
+        ));
+        this.setData({ seats, seatModalVisible: false }, () => this.saveWorkspace());
+      }
+    });
   },
 
   clearSelectedSeats() {
     const selected = new Set(this.data.selectedSeatIds);
-    const seats = this.data.seats.map((seat) => (
-      selected.has(seat.id) && !seat.deleted
-        ? { ...seat, studentName: '', note: '', selected: false }
-        : { ...seat, selected: false }
-    ));
-    this.setData({
-      seats,
-      selectedSeatIds: [],
-      sourceSeatIds: [],
-      batchPhase: 'source',
-      batchButtonText: this.data.batchSelecting ? '选择来源中' : '批量滑选'
-    }, () => this.saveWorkspace());
+    const clearCount = this.data.seats.filter((seat) => selected.has(seat.id) && !seat.deleted).length;
+    if (!clearCount) {
+      wx.showToast({ title: '请先选择座位', icon: 'none' });
+      return;
+    }
+
+    wx.showModal({
+      title: '清空所选座位',
+      content: `确定清空 ${clearCount} 个座位上的学生姓名和备注吗？`,
+      confirmText: '清空',
+      confirmColor: '#dc2626',
+      success: (res) => {
+        if (!res.confirm) return;
+        const seats = this.data.seats.map((seat) => (
+          selected.has(seat.id) && !seat.deleted
+            ? { ...seat, studentName: '', note: '', selected: false }
+            : { ...seat, selected: false }
+        ));
+        this.setData({
+          seats,
+          selectedSeatIds: [],
+          sourceSeatIds: [],
+          batchPhase: 'source',
+          batchButtonText: this.data.batchSelecting ? '选择来源中' : '批量滑选'
+        }, () => this.saveWorkspace());
+      }
+    });
   },
 
   swapSelectedSeats() {
@@ -337,25 +379,33 @@ module.exports = {
       return;
     }
 
-    const [firstId, secondId] = this.data.selectedSeatIds;
-    const first = this.data.seats.find((seat) => seat.id === firstId);
-    const second = this.data.seats.find((seat) => seat.id === secondId);
-    const seats = this.data.seats.map((seat) => {
-      if (seat.id === firstId) {
-        return { ...seat, studentName: second.studentName, note: second.note, selected: false };
-      }
-      if (seat.id === secondId) {
-        return { ...seat, studentName: first.studentName, note: first.note, selected: false };
-      }
-      return { ...seat, selected: false };
-    });
+    wx.showModal({
+      title: '交换座位',
+      content: '确定互换这两个座位上的学生姓名和备注吗？',
+      confirmText: '交换',
+      success: (res) => {
+        if (!res.confirm) return;
+        const [firstId, secondId] = this.data.selectedSeatIds;
+        const first = this.data.seats.find((seat) => seat.id === firstId);
+        const second = this.data.seats.find((seat) => seat.id === secondId);
+        const seats = this.data.seats.map((seat) => {
+          if (seat.id === firstId) {
+            return { ...seat, studentName: second.studentName, note: second.note, selected: false };
+          }
+          if (seat.id === secondId) {
+            return { ...seat, studentName: first.studentName, note: first.note, selected: false };
+          }
+          return { ...seat, selected: false };
+        });
 
-    this.setData({
-      seats,
-      selectedSeatIds: [],
-      sourceSeatIds: [],
-      batchPhase: 'source',
-      batchButtonText: this.data.batchSelecting ? '选择来源中' : '批量滑选'
-    }, () => this.saveWorkspace());
+        this.setData({
+          seats,
+          selectedSeatIds: [],
+          sourceSeatIds: [],
+          batchPhase: 'source',
+          batchButtonText: this.data.batchSelecting ? '选择来源中' : '批量滑选'
+        }, () => this.saveWorkspace());
+      }
+    });
   }
 };

@@ -63,11 +63,28 @@ module.exports = {
   },
 
   clearCell() {
-    this.setData({
-      cellForm: {
-        ...this.data.cellForm,
-        subject: '',
-        color: '#fff1f5'
+    const clearForm = () => {
+      this.setData({
+        cellForm: {
+          ...this.data.cellForm,
+          subject: '',
+          color: '#fff1f5'
+        }
+      });
+    };
+
+    if (!this.data.cellForm.subject) {
+      clearForm();
+      return;
+    }
+
+    wx.showModal({
+      title: '清空课程',
+      content: '确定清空当前课程格的科目和颜色吗？保存后会生效。',
+      confirmText: '清空',
+      confirmColor: '#dc2626',
+      success: (res) => {
+        if (res.confirm) clearForm();
       }
     });
   },

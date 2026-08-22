@@ -134,10 +134,20 @@ module.exports = {
 
   deleteTodo(event) {
     const id = event.currentTarget.dataset.id;
-    const todos = this.data.todos.filter((item) => item.id !== id);
-    this.setData({ todos }, () => {
-      this.refreshSummary();
-      this.saveWorkspace();
+    const todo = this.data.todos.find((item) => item.id === id);
+    wx.showModal({
+      title: '删除待办',
+      content: `确定删除${todo && todo.title ? `「${todo.title}」` : '这条待办'}吗？`,
+      confirmText: '删除',
+      confirmColor: '#dc2626',
+      success: (res) => {
+        if (!res.confirm) return;
+        const todos = this.data.todos.filter((item) => item.id !== id);
+        this.setData({ todos }, () => {
+          this.refreshSummary();
+          this.saveWorkspace();
+        });
+      }
     });
   },
 
