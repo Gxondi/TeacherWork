@@ -103,6 +103,23 @@ function saveTeacherProfile(openid, profile) {
   wx.setStorageSync(teacherProfileKey(openid), profile);
 }
 
+function payloadUpdatedAt(payload) {
+  return payload && payload._updatedAt ? payload._updatedAt : Date.now();
+}
+
+function loadCloudWorkspaces(openid, schoolYear) {
+  if (!openid) {
+    return Promise.resolve([]);
+  }
+
+  const db = wx.cloud.database();
+  return db.collection('teacher_workspaces')
+    .where({ ownerOpenid: openid, schoolYear })
+    .limit(100)
+    .get()
+    .then((res) => res.data || []);
+}
+
 function syncWorkspace(openid, schoolYear, classId, className, payload) {
   if (!openid) {
     return Promise.reject(new Error('missing openid'));
@@ -110,6 +127,7 @@ function syncWorkspace(openid, schoolYear, classId, className, payload) {
 
   const db = wx.cloud.database();
   const collection = db.collection('teacher_workspaces');
+  const clientUpdatedAt = payloadUpdatedAt(payload);
 
   return collection.where({ ownerOpenid: openid, schoolYear, classId }).get()
     .then((res) => {
@@ -119,6 +137,7 @@ function syncWorkspace(openid, schoolYear, classId, className, payload) {
             ownerOpenid: openid,
             className,
             payload,
+            clientUpdatedAt,
             updatedAt: db.serverDate()
           }
         });
@@ -131,6 +150,7 @@ function syncWorkspace(openid, schoolYear, classId, className, payload) {
           classId,
           className,
           payload,
+          clientUpdatedAt,
           createdAt: db.serverDate(),
           updatedAt: db.serverDate()
         }
@@ -143,6 +163,7 @@ module.exports = {
   DEFAULT_CLASS_NAME,
   loadActiveClassId,
   loadClasses,
+  loadCloudWorkspaces,
   loadTeacherProfile,
   loadWorkspace,
   saveActiveClassId,

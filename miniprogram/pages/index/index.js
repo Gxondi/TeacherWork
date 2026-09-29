@@ -161,6 +161,31 @@ function searchStudentIndex(index, query, limit = 8) {
     .slice(0, limit);
 }
 
+function mergeClasses(localClasses, cloudClasses) {
+  const map = {};
+  localClasses.forEach((item) => {
+    if (item && item.id) {
+      map[item.id] = item;
+    }
+  });
+  cloudClasses.forEach((item) => {
+    if (item && item.id) {
+      map[item.id] = item;
+    }
+  });
+  return Object.keys(map).map((id) => map[id]);
+}
+
+function workspaceUpdatedAt(workspace) {
+  return workspace && workspace._updatedAt ? Number(workspace._updatedAt) : 0;
+}
+
+function cloudWorkspaceUpdatedAt(doc) {
+  return doc && doc.clientUpdatedAt
+    ? Number(doc.clientUpdatedAt)
+    : workspaceUpdatedAt(doc && doc.payload);
+}
+
 const navGroups = [
   {
     title: '班级管理',
@@ -325,7 +350,7 @@ const pageCore = {
     }, () => this.loadWorkspace());
   },
 
-  loadWorkspace() {
+  loadWorkspace(options = {}) {
     const cached = workspaceStore.loadWorkspace(
       this.data.ownerOpenid,
       this.data.schoolYear,
@@ -343,10 +368,89 @@ const pageCore = {
       this.runStudentSearch(this.data.studentSearchQuery, { immediate: true });
       this.refreshSummary();
       if (this._syncAfterLogin) {
-        this._syncAfterLogin = false;
-        this.saveWorkspace({ silent: true });
+        if (options.skipCloudPull) {
+          this._syncAfterLogin = false;
+          this.saveWorkspace({ silent: true });
+        }
+      }
+
+      if (!options.skipCloudPull) {
+        this.pullCloudWorkspaces();
       }
     });
+  },
+
+  pullCloudWorkspaces() {
+    if (!this.data.cloudReady || !this.data.ownerOpenid || this._cloudPulling) {
+      return;
+    }
+
+    const ownerOpenid = this.data.ownerOpenid;
+    const schoolYear = this.data.schoolYear;
+    this._cloudPulling = true;
+    this.setData({ syncState: '正在读取 CloudBase' });
+
+    workspaceStore.loadCloudWorkspaces(ownerOpenid, schoolYear)
+      .then((docs) => {
+        this._cloudPulling = false;
+        if (ownerOpenid !== this.data.ownerOpenid || schoolYear !== this.data.schoolYear) {
+          return;
+        }
+
+        if (!docs.length) {
+          this.setData({ syncState: syncStateText(this.data.cloudReady, this.data.ownerOpenid) });
+          if (this._syncAfterLogin) {
+            this._syncAfterLogin = false;
+            this.saveWorkspace({ silent: true });
+          }
+          return;
+        }
+
+        const cloudClasses = docs
+          .filter((doc) => doc && doc.classId && doc.payload)
+          .map((doc) => ({
+            id: doc.classId,
+            name: String(doc.className || '').trim() || workspaceStore.DEFAULT_CLASS_NAME
+          }));
+
+        docs.forEach((doc) => {
+          if (doc && doc.classId && doc.payload) {
+            const localWorkspace = workspaceStore.loadWorkspace(ownerOpenid, schoolYear, doc.classId);
+            if (cloudWorkspaceUpdatedAt(doc) >= workspaceUpdatedAt(localWorkspace)) {
+              workspaceStore.saveWorkspace(ownerOpenid, schoolYear, doc.classId, doc.payload);
+            }
+          }
+        });
+
+        const classes = mergeClasses(this.data.classes, cloudClasses);
+        const activeClass = cloudClasses.find((item) => item.id === this.data.activeClassId) ||
+          cloudClasses[0] ||
+          classes.find((item) => item.id === this.data.activeClassId) ||
+          classes[0];
+
+        workspaceStore.saveClasses(ownerOpenid, schoolYear, classes);
+        if (activeClass) {
+          workspaceStore.saveActiveClassId(ownerOpenid, schoolYear, activeClass.id);
+        }
+
+        this._syncAfterLogin = false;
+        this.setData({
+          classes,
+          activeClassId: activeClass ? activeClass.id : this.data.activeClassId,
+          activeClassName: activeClass ? activeClass.name : this.data.activeClassName,
+          syncState: '已从 CloudBase 同步'
+        }, () => this.loadWorkspace({ skipCloudPull: true }));
+      })
+      .catch((error) => {
+        this._cloudPulling = false;
+        console.error('CloudBase loadCloudWorkspaces failed:', error);
+        if (ownerOpenid === this.data.ownerOpenid && schoolYear === this.data.schoolYear) {
+          this.setData({ syncState: 'CloudBase 读取失败，使用本地数据' });
+          if (this._syncAfterLogin) {
+            this._syncAfterLogin = false;
+          }
+        }
+      });
   },
 
   saveWorkspace(options = {}) {

@@ -126,6 +126,7 @@ function normalizeWorkspace(workspace) {
 
 function buildWorkspacePayload(data) {
   return {
+    _updatedAt: Date.now(),
     timetable: data.timetable.map((day) => ({
       ...day,
       cells: day.cells.map((cell) => normalizeCell(cell))
